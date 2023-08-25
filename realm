@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+export SCRIPT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+export SCRIPT_LIBS_DIR=${SCRIPT_ROOT}/libs
+export SCRIPT_CMD_DIR=${SCRIPT_ROOT}/commands
+
+
+## LIBRARIES
+source ${SCRIPT_LIBS_DIR}/__echo.sh
+source ${SCRIPT_LIBS_DIR}/__heredoc.sh
+
+[ -d .realm ] || mkdir .realm
+
+## Main
+cmd=$1
+shift
+
+case $cmd in
+  "init")
+    source ${SCRIPT_CMD_DIR}/__init.sh
+    ;;
+  "activate")
+    source ${SCRIPT_CMD_DIR}/__activate.sh
+    ;;
+  *)
+    echo "Invalid command: ${cmd}." | error
+    ;;
+esac
