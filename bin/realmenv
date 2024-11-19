@@ -1,0 +1,17 @@
+export LANG="en_US.UTF-8"
+
+export REALM_HOME="${HOME}/.realm"
+export REALM_BIN="${REALM_HOME}/bin"
+export REALM_CONFIG="${REALM_HOME}/config.sh"
+export SCRIPT_STACK_DIR="${REALM_HOME}/libexec/stack"
+
+source "${SCRIPT_STACK_DIR}/paths.sh"
+source "${SCRIPT_STACK_DIR}/alias.sh"
+source "${SCRIPT_STACK_DIR}/hooks.sh"
+source "${SCRIPT_STACK_DIR}/functions.sh"
+
+if [[ -f "$REALM_HOME/config.sh" ]]; then
+  echo "Loading config..."
+
+  source "$REALM_HOME/config.sh"
+fi
