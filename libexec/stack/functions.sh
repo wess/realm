@@ -95,8 +95,34 @@ EOL
     echo ".envrc file created successfully."
 }
 
-mkdbcd() {
-  db_name=$1
-  mkdir -p $db_name && cd $db_name
-  db_env $db_name
+#!/bin/bash
+
+# Function to create directories and files
+mkall() {
+  local base_path=""
+  local first_file="$1"
+  shift # Remove the first argument for further processing
+
+  # Expand ~ in the first file path
+  first_file=$(eval echo "$first_file")
+
+  # Determine the base path from the first file
+  if [[ "$first_file" == */* ]]; then
+    base_path="${first_file%/*}" # Extract everything before the last slash
+  else
+    base_path="." # Use the current directory if no path is provided
+  fi
+
+  # Ensure the base directory exists
+  mkdir -p "$base_path"
+
+  # Create the first file
+  touch "$first_file"
+  echo "Created: $first_file"
+
+  # Create the remaining files
+  for file in "$@"; do
+    touch "$base_path/$file"
+    echo "Created: $base_path/$file"
+  done
 }
