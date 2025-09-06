@@ -28,19 +28,19 @@ jobs:
           toolchain: ${{ matrix.rust }}
       
       - name: Cache cargo registry
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
       
       - name: Cache cargo index
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
       
       - name: Cache cargo build
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
@@ -109,7 +109,7 @@ jobs:
         run: cross build --release --target ${{ matrix.target }}
       
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
           path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
@@ -136,7 +136,7 @@ jobs:
           fi
       
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
       
@@ -148,33 +148,32 @@ jobs:
           done
       
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+        run: |
+          cat > release_notes.md << 'EOF'
+          Realm v${{ steps.version.outputs.VERSION }}
+          
+          ## Changes
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          
+          ## Installation
+          
+          ### macOS/Linux
+          ```bash
+          curl -sSfL https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/install.sh | bash
+          ```
+          
+          ### Manual Download
+          Download the appropriate binary for your platform below.
+          
+          ## Checksums
+          SHA256 checksums are provided for each binary.
+          EOF
+          
+          gh release create "${{ github.ref_name }}" \
+            --title "Realm v${{ steps.version.outputs.VERSION }}" \
+            --notes-file release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Realm v${{ steps.version.outputs.VERSION }}
-          body: |
-            Realm v${{ steps.version.outputs.VERSION }}
-            
-            ## Changes
-            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
-            
-            ## Installation
-            
-            ### macOS/Linux
-            ```bash
-            curl -sSfL https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/install.sh | bash
-            ```
-            
-            ### Manual Download
-            Download the appropriate binary for your platform below.
-            
-            ## Checksums
-            SHA256 checksums are provided for each binary.
-          draft: false
-          prerelease: false
       
       - name: Upload Release Assets
         run: |
