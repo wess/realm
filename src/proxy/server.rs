@@ -290,9 +290,7 @@ impl ProxyServer {
         }
       }
       Err(e) => {
-        eprintln!(
-          "Failed to proxy request to {process_name} (port {port}): {e}"
-        );
+        eprintln!("Failed to proxy request to {process_name} (port {port}): {e}");
         Ok(Response::builder()
                     .status(StatusCode::BAD_GATEWAY)
                     .header("content-type", "text/html")
