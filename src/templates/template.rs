@@ -1,6 +1,6 @@
+use crate::config::RealmConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::config::RealmConfig;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Template {

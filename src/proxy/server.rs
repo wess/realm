@@ -1,3 +1,5 @@
+use crate::config::RealmConfig;
+use crate::process::ProcessManager;
 use anyhow::{Context, Result};
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
@@ -9,8 +11,6 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
-use crate::config::RealmConfig;
-use crate::process::ProcessManager;
 
 pub struct ProxyServer {
     config: RealmConfig,
@@ -21,7 +21,7 @@ pub struct ProxyServer {
 impl ProxyServer {
     pub fn new(config: RealmConfig, process_manager: ProcessManager) -> Self {
         let route_map = Self::build_route_map(&config);
-        
+
         Self {
             config,
             process_manager,
@@ -31,29 +31,29 @@ impl ProxyServer {
 
     fn build_route_map(config: &RealmConfig) -> HashMap<String, (String, u16)> {
         let mut route_map = HashMap::new();
-        
+
         for (process_name, process_config) in &config.processes {
             let port = process_config.port.unwrap_or(3000);
-            
+
             for route in &process_config.routes {
                 route_map.insert(route.clone(), (process_name.clone(), port));
             }
         }
-        
+
         // Sort routes by specificity (longer/more specific routes first)
         let mut routes: Vec<_> = route_map.keys().cloned().collect();
         routes.sort_by(|a, b| {
             // Exact matches come before wildcard matches
             let a_wildcard = a.contains('*');
             let b_wildcard = b.contains('*');
-            
+
             match (a_wildcard, b_wildcard) {
                 (false, true) => std::cmp::Ordering::Less,
                 (true, false) => std::cmp::Ordering::Greater,
                 _ => b.len().cmp(&a.len()), // Longer routes first
             }
         });
-        
+
         // Rebuild map with sorted order
         let mut sorted_map = HashMap::new();
         for route in routes {
@@ -61,7 +61,7 @@ impl ProxyServer {
                 sorted_map.insert(route, value.clone());
             }
         }
-        
+
         sorted_map
     }
 
@@ -70,10 +70,14 @@ impl ProxyServer {
             .parse()
             .context("Invalid proxy port")?;
 
-        let listener = TcpListener::bind(addr).await
+        let listener = TcpListener::bind(addr)
+            .await
             .context("Failed to bind proxy server")?;
 
-        println!("🚀 Realm proxy server started on http://localhost:{}", self.config.proxy_port);
+        println!(
+            "🚀 Realm proxy server started on http://localhost:{}",
+            self.config.proxy_port
+        );
         println!("📋 Routes configured:");
         for (route, (process, port)) in &self.route_map {
             println!("   {} → {}:{}", route, process, port);
@@ -82,17 +86,17 @@ impl ProxyServer {
         loop {
             let (stream, _) = listener.accept().await?;
             let io = TokioIo::new(stream);
-            
+
             let route_map = self.route_map.clone();
             let process_manager = self.process_manager.clone();
-            
+
             tokio::task::spawn(async move {
                 if let Err(err) = http1::Builder::new()
                     .serve_connection(
                         io,
                         service_fn(move |req| {
                             Self::handle_request(req, route_map.clone(), process_manager.clone())
-                        })
+                        }),
                     )
                     .await
                 {
@@ -108,7 +112,7 @@ impl ProxyServer {
         _process_manager: ProcessManager,
     ) -> Result<Response<Full<Bytes>>, Infallible> {
         let path = req.uri().path();
-        
+
         // Health check endpoint
         if path == "/health" {
             return Ok(Response::builder()
@@ -120,18 +124,16 @@ impl ProxyServer {
 
         // Find matching route
         let target = Self::find_matching_route(path, &route_map);
-        
+
         match target {
-            Some((process_name, port)) => {
-                Self::proxy_request(req, &process_name, port).await
-            }
+            Some((process_name, port)) => Self::proxy_request(req, &process_name, port).await,
             None => {
                 eprintln!("No route found for path: {}", path);
                 Ok(Response::builder()
                     .status(StatusCode::NOT_FOUND)
                     .header("content-type", "text/html")
                     .body(Full::new(Bytes::from(format!(
-                        "<h1>404 Not Found</h1><p>No route configured for: {}</p>", 
+                        "<h1>404 Not Found</h1><p>No route configured for: {}</p>",
                         path
                     ))))
                     .unwrap())
@@ -139,12 +141,15 @@ impl ProxyServer {
         }
     }
 
-    fn find_matching_route(path: &str, route_map: &HashMap<String, (String, u16)>) -> Option<(String, u16)> {
+    fn find_matching_route(
+        path: &str,
+        route_map: &HashMap<String, (String, u16)>,
+    ) -> Option<(String, u16)> {
         // Try exact match first
         if let Some((process, port)) = route_map.get(path) {
             return Some((process.clone(), *port));
         }
-        
+
         // Try prefix matching for wildcard routes
         for (route, (process, port)) in route_map {
             if route.ends_with("*") {
@@ -154,12 +159,12 @@ impl ProxyServer {
                 }
             }
         }
-        
+
         // Default to root route if exists
         if let Some((process, port)) = route_map.get("/") {
             return Some((process.clone(), *port));
         }
-        
+
         None
     }
 
@@ -169,9 +174,16 @@ impl ProxyServer {
         port: u16,
     ) -> Result<Response<Full<Bytes>>, Infallible> {
         let target_url = format!("http://127.0.0.1:{}", port);
-        
+
         // Create new request to target
-        let uri_string = format!("{}{}", target_url, req.uri().path_and_query().map(|pq| pq.as_str()).unwrap_or(""));
+        let uri_string = format!(
+            "{}{}",
+            target_url,
+            req.uri()
+                .path_and_query()
+                .map(|pq| pq.as_str())
+                .unwrap_or("")
+        );
         let uri = match uri_string.parse::<hyper::Uri>() {
             Ok(uri) => uri,
             Err(e) => {
@@ -184,9 +196,7 @@ impl ProxyServer {
         };
 
         // Build new request
-        let mut proxy_req = Request::builder()
-            .method(req.method())
-            .uri(uri);
+        let mut proxy_req = Request::builder().method(req.method()).uri(uri);
 
         // Copy headers (except host)
         for (name, value) in req.headers() {
@@ -222,27 +232,35 @@ impl ProxyServer {
         };
 
         // Make the proxied request
-        let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new()).build_http();
-        
+        let client =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+                .build_http();
+
         match client.request(proxy_req).await {
             Ok(response) => {
                 let (parts, body) = response.into_parts();
-                
+
                 match body.collect().await {
                     Ok(collected) => {
                         let mut response_builder = Response::builder().status(parts.status);
-                        
+
                         // Copy response headers
                         for (name, value) in parts.headers {
                             response_builder = response_builder.header(name.unwrap(), value);
                         }
-                        
+
                         // Add CORS headers for development
                         response_builder = response_builder
                             .header("Access-Control-Allow-Origin", "*")
-                            .header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-                            .header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-                        
+                            .header(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, PUT, DELETE, OPTIONS",
+                            )
+                            .header(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type, Authorization",
+                            );
+
                         Ok(response_builder
                             .body(Full::new(collected.to_bytes()))
                             .unwrap())
@@ -251,13 +269,18 @@ impl ProxyServer {
                         eprintln!("Failed to read response body from {}: {}", process_name, e);
                         Ok(Response::builder()
                             .status(StatusCode::BAD_GATEWAY)
-                            .body(Full::new(Bytes::from("Failed to read response from upstream")))
+                            .body(Full::new(Bytes::from(
+                                "Failed to read response from upstream",
+                            )))
                             .unwrap())
                     }
                 }
             }
             Err(e) => {
-                eprintln!("Failed to proxy request to {} (port {}): {}", process_name, port, e);
+                eprintln!(
+                    "Failed to proxy request to {} (port {}): {}",
+                    process_name, port, e
+                );
                 Ok(Response::builder()
                     .status(StatusCode::BAD_GATEWAY)
                     .header("content-type", "text/html")

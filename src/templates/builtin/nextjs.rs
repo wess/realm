@@ -1,16 +1,16 @@
+use crate::config::{ProcessConfig, RealmConfig};
+use crate::templates::template::{Template, TemplateFile};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use crate::config::{ProcessConfig, RealmConfig};
-use crate::templates::template::{Template, TemplateFile};
 
 pub fn create_template(templates_dir: &Path) -> Result<()> {
     let template_dir = templates_dir.join("nextjs");
     if template_dir.exists() {
         return Ok(());
     }
-    
+
     fs::create_dir_all(&template_dir)?;
 
     let files = vec![
@@ -35,7 +35,8 @@ pub fn create_template(templates_dir: &Path) -> Result<()> {
     "@types/react-dom": "^18.0.0",
     "typescript": "^5.0.0"
   }
-}"#.to_string(),
+}"#
+            .to_string(),
             executable: false,
         },
         TemplateFile {
@@ -48,7 +49,8 @@ const nextConfig = {
 }
 
 module.exports = nextConfig
-"#.to_string(),
+"#
+            .to_string(),
             executable: false,
         },
         TemplateFile {
@@ -64,7 +66,8 @@ module.exports = nextConfig
     </html>
   )
 }
-"#.to_string(),
+"#
+            .to_string(),
             executable: false,
         },
         TemplateFile {
@@ -90,7 +93,8 @@ export default function Home() {
     </div>
   );
 }
-"#.to_string(),
+"#
+            .to_string(),
             executable: false,
         },
         TemplateFile {
@@ -104,7 +108,8 @@ export async function GET() {
     service: 'nextjs'
   });
 }
-"#.to_string(),
+"#
+            .to_string(),
             executable: false,
         },
     ];
@@ -114,12 +119,15 @@ export async function GET() {
         env_file: Some(".env.local".to_string()),
         processes: {
             let mut processes = HashMap::new();
-            processes.insert("nextjs".to_string(), ProcessConfig {
-                command: "bun run dev".to_string(),
-                port: Some(3000),
-                routes: vec!["/".to_string()],
-                working_directory: None,
-            });
+            processes.insert(
+                "nextjs".to_string(),
+                ProcessConfig {
+                    command: "bun run dev".to_string(),
+                    port: Some(3000),
+                    routes: vec!["/".to_string()],
+                    working_directory: None,
+                },
+            );
             processes
         },
         proxy_port: 8000,

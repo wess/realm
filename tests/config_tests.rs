@@ -96,11 +96,11 @@ fn test_realm_config_load_or_default() {
     // Test with non-existent file
     let config = RealmConfig::load_or_default("non_existent.yml");
     assert_eq!(config.proxy_port, 8000);
-    
+
     // Test with existing file
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("test.yml");
-    
+
     let yaml_content = r#"
 proxy_port: 9000
 env:
@@ -111,7 +111,7 @@ processes:
     port: 5000
     routes: ["/test"]
 "#;
-    
+
     fs::write(&config_path, yaml_content).unwrap();
     let config = RealmConfig::load_or_default(&config_path);
     assert_eq!(config.proxy_port, 9000);

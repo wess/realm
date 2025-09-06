@@ -1,8 +1,8 @@
+use crate::config::{ProcessConfig, RealmConfig};
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use crate::config::{ProcessConfig, RealmConfig};
 
 pub struct Bundler {
     config: RealmConfig,
@@ -76,7 +76,9 @@ impl Bundler {
         } else if working_dir.join("Cargo.toml").exists() {
             // Rust project
             self.build_rust_process(name, &working_dir)?;
-        } else if working_dir.join("requirements.txt").exists() || working_dir.join("pyproject.toml").exists() {
+        } else if working_dir.join("requirements.txt").exists()
+            || working_dir.join("pyproject.toml").exists()
+        {
             // Python project
             self.build_python_process(name, &working_dir)?;
         } else {
@@ -90,26 +92,34 @@ impl Bundler {
     fn build_nodejs_process(&self, name: &str, working_dir: &Path) -> Result<()> {
         // Install dependencies
         let output = Command::new("bun")
-            .args(&["install"])
+            .args(["install"])
             .current_dir(working_dir)
             .output()
             .context("Failed to run bun install")?;
 
         if !output.status.success() {
-            return Err(anyhow::anyhow!("bun install failed for {}: {}", name, String::from_utf8_lossy(&output.stderr)));
+            return Err(anyhow::anyhow!(
+                "bun install failed for {}: {}",
+                name,
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
 
         // Check if there's a build script
         let package_json = fs::read_to_string(working_dir.join("package.json"))?;
         if package_json.contains("\"build\"") {
             let output = Command::new("bun")
-                .args(&["run", "build"])
+                .args(["run", "build"])
                 .current_dir(working_dir)
                 .output()
                 .context("Failed to run build command")?;
 
             if !output.status.success() {
-                return Err(anyhow::anyhow!("Build failed for {}: {}", name, String::from_utf8_lossy(&output.stderr)));
+                return Err(anyhow::anyhow!(
+                    "Build failed for {}: {}",
+                    name,
+                    String::from_utf8_lossy(&output.stderr)
+                ));
             }
         }
 
@@ -118,20 +128,24 @@ impl Bundler {
         fs::create_dir_all(&process_dist)?;
 
         // Copy source and built files
-        self.copy_dir_contents(working_dir, &process_dist)?;
+        Self::copy_dir_contents(working_dir, &process_dist)?;
 
         Ok(())
     }
 
     fn build_rust_process(&self, name: &str, working_dir: &Path) -> Result<()> {
         let output = Command::new("cargo")
-            .args(&["build", "--release"])
+            .args(["build", "--release"])
             .current_dir(working_dir)
             .output()
             .context("Failed to run cargo build")?;
 
         if !output.status.success() {
-            return Err(anyhow::anyhow!("Cargo build failed for {}: {}", name, String::from_utf8_lossy(&output.stderr)));
+            return Err(anyhow::anyhow!(
+                "Cargo build failed for {}: {}",
+                name,
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
 
         let process_dist = self.dist_dir.join(name);
@@ -139,7 +153,7 @@ impl Bundler {
 
         // Copy target/release binary
         let target_dir = working_dir.join("target").join("release");
-        self.copy_dir_contents(&target_dir, &process_dist)?;
+        Self::copy_dir_contents(&target_dir, &process_dist)?;
 
         Ok(())
     }
@@ -147,21 +161,21 @@ impl Bundler {
     fn build_python_process(&self, name: &str, working_dir: &Path) -> Result<()> {
         let process_dist = self.dist_dir.join(name);
         fs::create_dir_all(&process_dist)?;
-        
+
         // Just copy Python source files - containerization will handle dependencies
-        self.copy_dir_contents(working_dir, &process_dist)?;
-        
+        Self::copy_dir_contents(working_dir, &process_dist)?;
+
         Ok(())
     }
 
     fn copy_source_files(&self, name: &str, working_dir: &Path) -> Result<()> {
         let process_dist = self.dist_dir.join(name);
         fs::create_dir_all(&process_dist)?;
-        self.copy_dir_contents(working_dir, &process_dist)?;
+        Self::copy_dir_contents(working_dir, &process_dist)?;
         Ok(())
     }
 
-    fn copy_dir_contents(&self, from: &Path, to: &Path) -> Result<()> {
+    fn copy_dir_contents(from: &Path, to: &Path) -> Result<()> {
         if !from.exists() {
             return Ok(());
         }
@@ -173,7 +187,10 @@ impl Bundler {
 
             // Skip common ignore patterns
             if let Some(name_str) = name.to_str() {
-                if matches!(name_str, "node_modules" | "target" | ".git" | "dist" | "build" | ".realm") {
+                if matches!(
+                    name_str,
+                    "node_modules" | "target" | ".git" | "dist" | "build" | ".realm"
+                ) {
                     continue;
                 }
             }
@@ -182,7 +199,7 @@ impl Bundler {
 
             if path.is_dir() {
                 fs::create_dir_all(&dest_path)?;
-                self.copy_dir_contents(&path, &dest_path)?;
+                Self::copy_dir_contents(&path, &dest_path)?;
             } else {
                 fs::copy(&path, &dest_path)?;
             }
@@ -196,7 +213,7 @@ impl Bundler {
         if self.project_root.join(".env").exists() {
             fs::copy(
                 self.project_root.join(".env"),
-                self.dist_dir.join(".env.example")
+                self.dist_dir.join(".env.example"),
             )?;
         }
 
@@ -204,7 +221,8 @@ impl Bundler {
     }
 
     fn generate_dockerfile(&self) -> Result<()> {
-        let dockerfile_content = format!(r#"# Multi-stage Dockerfile generated by Realm
+        let dockerfile_content = format!(
+            r#"# Multi-stage Dockerfile generated by Realm
 FROM node:18-alpine as base
 
 # Install Bun
@@ -221,7 +239,7 @@ EXPOSE {}
 
 # Start command will be overridden by docker-compose
 CMD ["echo", "Use docker-compose to start services"]
-"#, 
+"#,
             self.generate_dockerfile_copy_commands(),
             self.config.proxy_port
         );
@@ -232,8 +250,8 @@ CMD ["echo", "Use docker-compose to start services"]
 
     fn generate_dockerfile_copy_commands(&self) -> String {
         let mut commands = String::new();
-        
-        for (name, _) in &self.config.processes {
+
+        for name in self.config.processes.keys() {
             commands.push_str(&format!("COPY ./{} /app/{}\n", name, name));
         }
 
@@ -246,9 +264,13 @@ CMD ["echo", "Use docker-compose to start services"]
         // Generate service for each process
         for (name, config) in &self.config.processes {
             let port = config.port.unwrap_or(3000);
-            let working_dir = config.working_directory.clone().unwrap_or_else(|| name.clone());
-            
-            services.push_str(&format!(r#"  {}:
+            let working_dir = config
+                .working_directory
+                .clone()
+                .unwrap_or_else(|| name.clone());
+
+            services.push_str(&format!(
+                r#"  {}:
     build: .
     working_dir: /app/{}
     command: {}
@@ -259,7 +281,7 @@ CMD ["echo", "Use docker-compose to start services"]
     networks:
       - realm-network
 
-"#, 
+"#,
                 name,
                 working_dir,
                 config.command,
@@ -270,7 +292,8 @@ CMD ["echo", "Use docker-compose to start services"]
         }
 
         // Add nginx service
-        services.push_str(&format!(r#"  nginx:
+        services.push_str(&format!(
+            r#"  nginx:
     image: nginx:alpine
     ports:
       - "{}:{}"
@@ -287,7 +310,8 @@ CMD ["echo", "Use docker-compose to start services"]
             self.generate_nginx_depends_on()
         ));
 
-        let docker_compose_content = format!(r#"version: '3.8'
+        let docker_compose_content = format!(
+            r#"version: '3.8'
 
 services:
 {}
@@ -295,15 +319,20 @@ services:
 networks:
   realm-network:
     driver: bridge
-"#, services);
+"#,
+            services
+        );
 
-        fs::write(self.dist_dir.join("docker-compose.yml"), docker_compose_content)?;
+        fs::write(
+            self.dist_dir.join("docker-compose.yml"),
+            docker_compose_content,
+        )?;
         Ok(())
     }
 
     fn generate_env_vars(&self) -> String {
         let mut env_vars = String::new();
-        
+
         for (key, value) in &self.config.env {
             env_vars.push_str(&format!("      - {}={}\n", key, value));
         }
@@ -312,7 +341,9 @@ networks:
     }
 
     fn generate_nginx_depends_on(&self) -> String {
-        self.config.processes.keys()
+        self.config
+            .processes
+            .keys()
             .map(|name| format!("      - {}", name))
             .collect::<Vec<_>>()
             .join("\n")
@@ -324,13 +355,16 @@ networks:
 
         for (name, config) in &self.config.processes {
             let port = config.port.unwrap_or(3000);
-            
+
             // Create upstream
-            upstream_servers.push_str(&format!(r#"
+            upstream_servers.push_str(&format!(
+                r#"
     upstream {} {{
         server {}:{};
     }}
-"#, name, name, port));
+"#,
+                name, name, port
+            ));
 
             // Create location blocks for routes
             for route in &config.routes {
@@ -340,7 +374,8 @@ networks:
                     route.replace("*", "").to_string()
                 };
 
-                location_blocks.push_str(&format!(r#"
+                location_blocks.push_str(&format!(
+                    r#"
         location {} {{
             proxy_pass http://{};
             proxy_set_header Host $host;
@@ -353,11 +388,14 @@ networks:
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
         }}
-"#, location, name));
+"#,
+                    location, name
+                ));
             }
         }
 
-        let nginx_config = format!(r#"events {{
+        let nginx_config = format!(
+            r#"events {{
     worker_connections 1024;
 }}
 
@@ -398,7 +436,9 @@ http {{
         }}
     }}
 }}
-"#, upstream_servers, self.config.proxy_port, location_blocks);
+"#,
+            upstream_servers, self.config.proxy_port, location_blocks
+        );
 
         fs::write(self.dist_dir.join("nginx.conf"), nginx_config)?;
         Ok(())
@@ -433,7 +473,8 @@ echo "🛑 Stop services: docker-compose down"
         }
 
         // README for deployment
-        let readme_content = format!(r#"# Realm Deployment Bundle
+        let readme_content = format!(
+            r#"# Realm Deployment Bundle
 
 This directory contains everything needed to deploy your Realm application.
 
@@ -482,7 +523,9 @@ Your application includes the following services:
     }
 
     fn generate_services_list(&self) -> String {
-        self.config.processes.iter()
+        self.config
+            .processes
+            .iter()
             .map(|(name, config)| {
                 let port = config.port.unwrap_or(3000);
                 let routes = config.routes.join(", ");

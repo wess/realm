@@ -1,12 +1,12 @@
 use anyhow::{anyhow, Context, Result};
+use dirs::home_dir;
 use flate2::read::GzDecoder;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tar::Archive;
-use dirs::home_dir;
 
-use super::runtime::Runtime;
+use super::types::Runtime;
 
 pub struct RuntimeManager {
     realm_dir: PathBuf,
@@ -16,7 +16,7 @@ impl RuntimeManager {
     pub fn new() -> Result<Self> {
         let home = home_dir().ok_or_else(|| anyhow!("Could not find home directory"))?;
         let realm_dir = home.join(".realm");
-        
+
         if !realm_dir.exists() {
             fs::create_dir_all(&realm_dir).context("Failed to create .realm directory")?;
         }
@@ -30,12 +30,15 @@ impl RuntimeManager {
 
     pub fn get_runtime_path(&self, runtime: &Runtime) -> PathBuf {
         match runtime {
-            Runtime::Bun(version) => {
-                self.get_runtime_versions_dir(runtime).join(version).join("bun")
-            }
-            Runtime::Node(version) => {
-                self.get_runtime_versions_dir(runtime).join(version).join("bin").join("node")
-            }
+            Runtime::Bun(version) => self
+                .get_runtime_versions_dir(runtime)
+                .join(version)
+                .join("bun"),
+            Runtime::Node(version) => self
+                .get_runtime_versions_dir(runtime)
+                .join(version)
+                .join("bin")
+                .join("node"),
         }
     }
 
@@ -67,7 +70,12 @@ impl RuntimeManager {
         let arch = match std::env::consts::ARCH {
             "x86_64" => "x64",
             "aarch64" => "aarch64",
-            _ => return Err(anyhow!("Unsupported architecture: {}", std::env::consts::ARCH)),
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported architecture: {}",
+                    std::env::consts::ARCH
+                ))
+            }
         };
 
         let download_url = format!(
@@ -75,16 +83,22 @@ impl RuntimeManager {
             actual_version, os, arch
         );
 
-        let response = reqwest::get(&download_url).await
+        let response = reqwest::get(&download_url)
+            .await
             .context("Failed to download Bun")?;
 
         if !response.status().is_success() {
-            return Err(anyhow!("Failed to download Bun: HTTP {}", response.status()));
+            return Err(anyhow!(
+                "Failed to download Bun: HTTP {}",
+                response.status()
+            ));
         }
 
         let bytes = response.bytes().await.context("Failed to read download")?;
-        
-        let version_dir = self.get_runtime_versions_dir(&Runtime::Bun(actual_version.clone())).join(&actual_version);
+
+        let version_dir = self
+            .get_runtime_versions_dir(&Runtime::Bun(actual_version.clone()))
+            .join(&actual_version);
         fs::create_dir_all(&version_dir).context("Failed to create version directory")?;
 
         let temp_file = version_dir.join("bun.zip");
@@ -99,7 +113,10 @@ impl RuntimeManager {
             .context("Failed to extract Bun")?;
 
         if !output.status.success() {
-            return Err(anyhow!("Failed to extract Bun: {}", String::from_utf8_lossy(&output.stderr)));
+            return Err(anyhow!(
+                "Failed to extract Bun: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
 
         let extracted_dir = version_dir.join(format!("bun-{}-{}", os, arch));
@@ -113,9 +130,9 @@ impl RuntimeManager {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&version_dir.join("bun"))?.permissions();
+            let mut perms = fs::metadata(version_dir.join("bun"))?.permissions();
             perms.set_mode(0o755);
-            fs::set_permissions(&version_dir.join("bun"), perms)?;
+            fs::set_permissions(version_dir.join("bun"), perms)?;
         }
 
         let _ = fs::remove_file(temp_file);
@@ -137,13 +154,23 @@ impl RuntimeManager {
         let os = match std::env::consts::OS {
             "macos" => "darwin",
             "linux" => "linux",
-            _ => return Err(anyhow!("Unsupported OS for Node.js installation: {}", std::env::consts::OS)),
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported OS for Node.js installation: {}",
+                    std::env::consts::OS
+                ))
+            }
         };
 
         let arch = match std::env::consts::ARCH {
             "x86_64" => "x64",
             "aarch64" => "arm64",
-            _ => return Err(anyhow!("Unsupported architecture: {}", std::env::consts::ARCH)),
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported architecture: {}",
+                    std::env::consts::ARCH
+                ))
+            }
         };
 
         let download_url = format!(
@@ -151,16 +178,22 @@ impl RuntimeManager {
             actual_version, actual_version, os, arch
         );
 
-        let response = reqwest::get(&download_url).await
+        let response = reqwest::get(&download_url)
+            .await
             .context("Failed to download Node.js")?;
 
         if !response.status().is_success() {
-            return Err(anyhow!("Failed to download Node.js: HTTP {}", response.status()));
+            return Err(anyhow!(
+                "Failed to download Node.js: HTTP {}",
+                response.status()
+            ));
         }
 
         let bytes = response.bytes().await.context("Failed to read download")?;
-        
-        let version_dir = self.get_runtime_versions_dir(&Runtime::Node(actual_version.clone())).join(&actual_version);
+
+        let version_dir = self
+            .get_runtime_versions_dir(&Runtime::Node(actual_version.clone()))
+            .join(&actual_version);
         fs::create_dir_all(&version_dir).context("Failed to create version directory")?;
 
         // Extract tar.gz
@@ -168,7 +201,9 @@ impl RuntimeManager {
         let tar = GzDecoder::new(tar_gz);
         let mut archive = Archive::new(tar);
 
-        archive.unpack(&version_dir).context("Failed to extract Node.js")?;
+        archive
+            .unpack(&version_dir)
+            .context("Failed to extract Node.js")?;
 
         // Move extracted contents to proper location
         let extracted_dir = version_dir.join(format!("node-v{}-{}-{}", actual_version, os, arch));
@@ -179,7 +214,7 @@ impl RuntimeManager {
                 let src = entry.path();
                 let dst = version_dir.join(entry.file_name());
                 if src.is_dir() {
-                    self.copy_dir(&src, &dst)?;
+                    Self::copy_dir(&src, &dst)?;
                 } else {
                     fs::copy(&src, &dst)?;
                 }
@@ -191,14 +226,14 @@ impl RuntimeManager {
         Ok(())
     }
 
-    fn copy_dir(&self, src: &Path, dst: &Path) -> Result<()> {
+    fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
         fs::create_dir_all(dst)?;
         for entry in fs::read_dir(src)? {
             let entry = entry?;
             let src_path = entry.path();
             let dst_path = dst.join(entry.file_name());
             if src_path.is_dir() {
-                self.copy_dir(&src_path, &dst_path)?;
+                Self::copy_dir(&src_path, &dst_path)?;
             } else {
                 fs::copy(&src_path, &dst_path)?;
             }
@@ -207,26 +242,32 @@ impl RuntimeManager {
     }
 
     async fn get_latest_bun_version(&self) -> Result<String> {
-        let response = reqwest::get("https://api.github.com/repos/oven-sh/bun/releases/latest").await
+        let response = reqwest::get("https://api.github.com/repos/oven-sh/bun/releases/latest")
+            .await
             .context("Failed to fetch latest Bun version")?;
 
-        let json: serde_json::Value = response.json().await
+        let json: serde_json::Value = response
+            .json()
+            .await
             .context("Failed to parse GitHub API response")?;
 
-        let tag_name = json["tag_name"].as_str()
+        let tag_name = json["tag_name"]
+            .as_str()
             .ok_or_else(|| anyhow!("Could not find tag_name in GitHub API response"))?;
 
-        let version = tag_name.strip_prefix("bun-v")
-            .unwrap_or(tag_name);
+        let version = tag_name.strip_prefix("bun-v").unwrap_or(tag_name);
 
         Ok(version.to_string())
     }
 
     async fn get_latest_node_version(&self) -> Result<String> {
-        let response = reqwest::get("https://nodejs.org/dist/index.json").await
+        let response = reqwest::get("https://nodejs.org/dist/index.json")
+            .await
             .context("Failed to fetch Node.js versions")?;
 
-        let versions: serde_json::Value = response.json().await
+        let versions: serde_json::Value = response
+            .json()
+            .await
             .context("Failed to parse Node.js versions response")?;
 
         if let Some(latest) = versions.as_array().and_then(|arr| arr.first()) {
@@ -242,8 +283,16 @@ impl RuntimeManager {
     pub fn get_npm_path(&self, runtime: &Runtime) -> Option<PathBuf> {
         match runtime {
             Runtime::Node(version) => {
-                let npm_path = self.get_runtime_versions_dir(runtime).join(version).join("bin").join("npm");
-                if npm_path.exists() { Some(npm_path) } else { None }
+                let npm_path = self
+                    .get_runtime_versions_dir(runtime)
+                    .join(version)
+                    .join("bin")
+                    .join("npm");
+                if npm_path.exists() {
+                    Some(npm_path)
+                } else {
+                    None
+                }
             }
             Runtime::Bun(_) => None, // Bun doesn't use npm
         }
@@ -251,9 +300,13 @@ impl RuntimeManager {
 
     pub fn run_runtime(&self, runtime: &Runtime, args: &[&str]) -> Result<std::process::Child> {
         let runtime_path = self.get_runtime_path(runtime);
-        
+
         if !runtime_path.exists() {
-            return Err(anyhow!("{} version {} is not installed", runtime.name(), runtime.version()));
+            return Err(anyhow!(
+                "{} version {} is not installed",
+                runtime.name(),
+                runtime.version()
+            ));
         }
 
         Command::new(runtime_path)

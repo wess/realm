@@ -1,10 +1,10 @@
+use super::builtin::{nextjs, react, svelte, vue};
+use super::template::{Template, TemplateFile};
+use crate::config::RealmConfig;
 use anyhow::{anyhow, Context, Result};
+use dirs::home_dir;
 use std::fs;
 use std::path::{Path, PathBuf};
-use dirs::home_dir;
-use crate::config::RealmConfig;
-use super::template::{Template, TemplateFile};
-use super::builtin::{react, svelte, vue, nextjs};
 
 pub struct TemplateManager {
     templates_dir: PathBuf,
@@ -14,7 +14,7 @@ impl TemplateManager {
     pub fn new() -> Result<Self> {
         let home = home_dir().ok_or_else(|| anyhow!("Could not find home directory"))?;
         let templates_dir = home.join(".realm").join("templates");
-        
+
         if !templates_dir.exists() {
             fs::create_dir_all(&templates_dir).context("Failed to create templates directory")?;
         }
@@ -24,15 +24,17 @@ impl TemplateManager {
 
     pub fn create_template_from_current_dir(&self, name: &str) -> Result<()> {
         let current_dir = std::env::current_dir()?;
-        
+
         // Check if realm.yml exists
         let realm_yml_path = current_dir.join("realm.yml");
         if !realm_yml_path.exists() {
-            return Err(anyhow!("No realm.yml found in current directory. Initialize a realm project first."));
+            return Err(anyhow!(
+                "No realm.yml found in current directory. Initialize a realm project first."
+            ));
         }
 
         let realm_config = RealmConfig::load(&realm_yml_path)?;
-        
+
         // Collect all files in current directory (excluding common ignore patterns)
         let mut files = Vec::new();
         self.collect_template_files(&current_dir, &current_dir, &mut files)?;
@@ -49,7 +51,7 @@ impl TemplateManager {
         // Save template
         let template_dir = self.templates_dir.join(name);
         fs::create_dir_all(&template_dir)?;
-        
+
         let template_file = template_dir.join("template.yml");
         let template_content = serde_yaml::to_string(&template)?;
         fs::write(template_file, template_content)?;
@@ -62,7 +64,7 @@ impl TemplateManager {
 
     pub fn init_from_template(&self, template_name: &str, target_dir: &Path) -> Result<()> {
         let template = self.load_template(template_name)?;
-        
+
         if target_dir.exists() && target_dir.read_dir()?.next().is_some() {
             return Err(anyhow!("Target directory is not empty"));
         }
@@ -72,7 +74,7 @@ impl TemplateManager {
         // Create files from template
         for file in &template.files {
             let file_path = target_dir.join(&file.path);
-            
+
             if let Some(parent) = file_path.parent() {
                 fs::create_dir_all(parent)?;
             }
@@ -95,7 +97,11 @@ impl TemplateManager {
         let realm_yml_path = target_dir.join("realm.yml");
         template.realm_config.save(&realm_yml_path)?;
 
-        println!("Project created from template '{}' in {}", template_name, target_dir.display());
+        println!(
+            "Project created from template '{}' in {}",
+            template_name,
+            target_dir.display()
+        );
         println!("Next steps:");
         println!("  cd {}", target_dir.display());
         println!("  realm init .venv");
@@ -107,7 +113,7 @@ impl TemplateManager {
 
     pub fn list_templates(&self) -> Result<Vec<String>> {
         let mut templates = Vec::new();
-        
+
         if !self.templates_dir.exists() {
             return Ok(templates);
         }
@@ -127,7 +133,7 @@ impl TemplateManager {
 
     fn load_template(&self, name: &str) -> Result<Template> {
         let template_file = self.templates_dir.join(name).join("template.yml");
-        
+
         if !template_file.exists() {
             return Err(anyhow!("Template '{}' not found", name));
         }
@@ -137,11 +143,16 @@ impl TemplateManager {
         Ok(template)
     }
 
-    fn collect_template_files(&self, base_dir: &Path, current_dir: &Path, files: &mut Vec<TemplateFile>) -> Result<()> {
+    fn collect_template_files(
+        &self,
+        base_dir: &Path,
+        current_dir: &Path,
+        files: &mut Vec<TemplateFile>,
+    ) -> Result<()> {
         for entry in fs::read_dir(current_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             // Skip common ignore patterns
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                 if name.starts_with('.') && name != ".env" {
@@ -157,7 +168,7 @@ impl TemplateManager {
             if path.is_file() {
                 let content = fs::read_to_string(&path)?;
                 let executable = self.is_executable(&path)?;
-                
+
                 files.push(TemplateFile {
                     path: relative_path,
                     content,
@@ -184,7 +195,11 @@ impl TemplateManager {
         }
     }
 
-    fn process_template_variables(&self, content: &str, _variables: &std::collections::HashMap<String, String>) -> String {
+    fn process_template_variables(
+        &self,
+        content: &str,
+        _variables: &std::collections::HashMap<String, String>,
+    ) -> String {
         // Simple implementation - could be enhanced with proper templating
         content.to_string()
     }

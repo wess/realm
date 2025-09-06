@@ -1,7 +1,7 @@
+use crate::config::RealmConfig;
 use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::config::RealmConfig;
 
 pub struct RealmEnvironment {
     pub path: PathBuf,
@@ -11,9 +11,12 @@ pub struct RealmEnvironment {
 impl RealmEnvironment {
     pub fn init<P: AsRef<Path>>(path: P) -> Result<Self> {
         let env_path = path.as_ref().to_path_buf();
-        
+
         if env_path.exists() {
-            return Err(anyhow!("Realm environment already exists at {}", env_path.display()));
+            return Err(anyhow!(
+                "Realm environment already exists at {}",
+                env_path.display()
+            ));
         }
 
         // Create directory structure
@@ -49,9 +52,12 @@ impl RealmEnvironment {
 
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let env_path = path.as_ref().to_path_buf();
-        
+
         if !env_path.exists() {
-            return Err(anyhow!("Realm environment not found at {}", env_path.display()));
+            return Err(anyhow!(
+                "Realm environment not found at {}",
+                env_path.display()
+            ));
         }
 
         // Look for realm.yml in current directory or parent directories
@@ -66,25 +72,28 @@ impl RealmEnvironment {
 
     fn find_realm_yml() -> Result<PathBuf> {
         let mut current_dir = std::env::current_dir()?;
-        
+
         loop {
             let realm_yml = current_dir.join("realm.yml");
             if realm_yml.exists() {
                 return Ok(realm_yml);
             }
-            
+
             if let Some(parent) = current_dir.parent() {
                 current_dir = parent.to_path_buf();
             } else {
                 break;
             }
         }
-        
-        Err(anyhow!("realm.yml not found in current directory or parent directories"))
+
+        Err(anyhow!(
+            "realm.yml not found in current directory or parent directories"
+        ))
     }
 
     fn generate_activation_script(&self) -> Result<()> {
-        let activate_script = format!(r#"#!/bin/bash
+        let activate_script = format!(
+            r#"#!/bin/bash
 # This file must be used with "source bin/activate" *from bash*
 # you cannot run it directly
 
@@ -136,14 +145,13 @@ echo "Realm environment activated"
 echo "Run 'realm start' to start your processes"
 echo "Run 'realm proxy' to start the development proxy"
 echo "Run 'deactivate' to exit the realm environment"
-"#, 
+"#,
             self.path.display(),
             self.path.join("bin").display()
         );
 
         let activate_path = self.path.join("bin").join("activate");
-        fs::write(&activate_path, activate_script)
-            .context("Failed to write activation script")?;
+        fs::write(&activate_path, activate_script).context("Failed to write activation script")?;
 
         // Make executable
         #[cfg(unix)]

@@ -35,8 +35,8 @@ impl Default for RealmConfig {
 impl RealmConfig {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = fs::read_to_string(path).context("Failed to read realm.yml")?;
-        let config: RealmConfig = serde_yaml::from_str(&content)
-            .context("Failed to parse realm.yml")?;
+        let config: RealmConfig =
+            serde_yaml::from_str(&content).context("Failed to parse realm.yml")?;
         Ok(config)
     }
 
@@ -45,8 +45,7 @@ impl RealmConfig {
     }
 
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let content = serde_yaml::to_string(self)
-            .context("Failed to serialize config")?;
+        let content = serde_yaml::to_string(self).context("Failed to serialize config")?;
         fs::write(path, content).context("Failed to write realm.yml")?;
         Ok(())
     }

@@ -1,6 +1,6 @@
 pub mod builtin;
-pub mod template;
 pub mod manager;
+pub mod template;
 
-pub use template::{Template, TemplateFile};
 pub use manager::TemplateManager;
+pub use template::{Template, TemplateFile};

@@ -1,5 +1,5 @@
-use std::process::Child;
 use crate::config::ProcessConfig;
+use std::process::Child;
 
 #[derive(Debug)]
 pub struct ProcessInfo {

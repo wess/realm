@@ -1,5 +1,5 @@
+pub mod realm;
 pub mod process;
-pub mod config;
 
+pub use realm::RealmConfig;
 pub use process::ProcessConfig;
-pub use config::RealmConfig;

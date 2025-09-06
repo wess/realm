@@ -21,7 +21,7 @@ impl EnvManager {
         }
 
         let content = fs::read_to_string(path).context("Failed to read env file")?;
-        
+
         for line in content.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {
@@ -30,7 +30,11 @@ impl EnvManager {
 
             if let Some((key, value)) = line.split_once('=') {
                 let key = key.trim().to_string();
-                let value = value.trim().trim_matches('"').trim_matches('\'').to_string();
+                let value = value
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string();
                 self.vars.insert(key, value);
             }
         }

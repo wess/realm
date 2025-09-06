@@ -1,16 +1,16 @@
+use crate::config::{ProcessConfig, RealmConfig};
+use crate::templates::template::{Template, TemplateFile};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use crate::config::{ProcessConfig, RealmConfig};
-use crate::templates::template::{Template, TemplateFile};
 
 pub fn create_template(templates_dir: &Path) -> Result<()> {
     let template_dir = templates_dir.join("vue-express");
     if template_dir.exists() {
         return Ok(());
     }
-    
+
     fs::create_dir_all(&template_dir)?;
 
     let files = vec![
@@ -31,7 +31,8 @@ pub fn create_template(templates_dir: &Path) -> Result<()> {
     "@vitejs/plugin-vue": "^4.4.0",
     "vite": "^4.4.0"
   }
-}"#.to_string(),
+}"#
+            .to_string(),
             executable: false,
         },
         TemplateFile {
@@ -95,7 +96,8 @@ button {
   margin: 10px;
 }
 </style>
-"#.to_string(),
+"#
+            .to_string(),
             executable: false,
         },
         TemplateFile {
@@ -110,7 +112,8 @@ button {
     "express": "^4.18.0",
     "cors": "^2.8.5"
   }
-}"#.to_string(),
+}"#
+            .to_string(),
             executable: false,
         },
         TemplateFile {
@@ -146,7 +149,8 @@ app.get('/api/users', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Express server running on http://localhost:${PORT}`);
 });
-"#.to_string(),
+"#
+            .to_string(),
             executable: false,
         },
     ];
@@ -156,18 +160,28 @@ app.listen(PORT, () => {
         env_file: Some(".env".to_string()),
         processes: {
             let mut processes = HashMap::new();
-            processes.insert("frontend".to_string(), ProcessConfig {
-                command: "bun run dev".to_string(),
-                port: Some(4000),
-                routes: vec!["/".to_string(), "/src/*".to_string(), "/assets/*".to_string()],
-                working_directory: Some("frontend".to_string()),
-            });
-            processes.insert("backend".to_string(), ProcessConfig {
-                command: "bun run dev".to_string(),
-                port: Some(4001),
-                routes: vec!["/api/*".to_string()],
-                working_directory: Some("backend".to_string()),
-            });
+            processes.insert(
+                "frontend".to_string(),
+                ProcessConfig {
+                    command: "bun run dev".to_string(),
+                    port: Some(4000),
+                    routes: vec![
+                        "/".to_string(),
+                        "/src/*".to_string(),
+                        "/assets/*".to_string(),
+                    ],
+                    working_directory: Some("frontend".to_string()),
+                },
+            );
+            processes.insert(
+                "backend".to_string(),
+                ProcessConfig {
+                    command: "bun run dev".to_string(),
+                    port: Some(4001),
+                    routes: vec!["/api/*".to_string()],
+                    working_directory: Some("backend".to_string()),
+                },
+            );
             processes
         },
         proxy_port: 8000,

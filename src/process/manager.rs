@@ -1,9 +1,9 @@
+use super::info::ProcessInfo;
+use crate::config::RealmConfig;
 use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
-use crate::config::RealmConfig;
-use super::info::ProcessInfo;
 
 pub struct ProcessManager {
     processes: Arc<Mutex<HashMap<String, ProcessInfo>>>,
@@ -35,7 +35,8 @@ impl ProcessManager {
 
     pub fn start_process(&self, name: &str) -> Result<()> {
         let mut processes = self.processes.lock().unwrap();
-        let process_info = processes.get_mut(name)
+        let process_info = processes
+            .get_mut(name)
             .ok_or_else(|| anyhow!("Process '{}' not found", name))?;
 
         if process_info.child.is_some() {
@@ -62,10 +63,12 @@ impl ProcessManager {
 
         // Set up stdio
         cmd.stdout(Stdio::piped())
-           .stderr(Stdio::piped())
-           .stdin(Stdio::null());
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null());
 
-        let child = cmd.spawn().context(format!("Failed to start process '{}'", name))?;
+        let child = cmd
+            .spawn()
+            .context(format!("Failed to start process '{}'", name))?;
         process_info.child = Some(child);
 
         println!("Process '{}' started successfully", name);
@@ -74,16 +77,17 @@ impl ProcessManager {
 
     pub fn stop_process(&self, name: &str) -> Result<()> {
         let mut processes = self.processes.lock().unwrap();
-        let process_info = processes.get_mut(name)
+        let process_info = processes
+            .get_mut(name)
             .ok_or_else(|| anyhow!("Process '{}' not found", name))?;
 
         if let Some(mut child) = process_info.child.take() {
             println!("Stopping process: {}", name);
-            
+
             // Try graceful termination first
             let _ = child.kill();
             let _ = child.wait();
-            
+
             println!("Process '{}' stopped", name);
         }
 
@@ -130,10 +134,7 @@ impl ProcessManager {
         if let Some(process_info) = processes.get(name) {
             if let Some(child) = &process_info.child {
                 // Check if process is still alive
-                match child.id() {
-                    0 => false,
-                    _ => true,
-                }
+                !matches!(child.id(), 0)
             } else {
                 false
             }
@@ -149,7 +150,8 @@ impl ProcessManager {
 
     pub fn get_process_routes(&self, name: &str) -> Vec<String> {
         let processes = self.processes.lock().unwrap();
-        processes.get(name)
+        processes
+            .get(name)
             .map(|p| p.config.routes.clone())
             .unwrap_or_default()
     }
