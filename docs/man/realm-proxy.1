@@ -1,0 +1,164 @@
+.TH REALM-PROXY 1 "2024" "realm 0.1.0" "User Commands"
+.SH NAME
+realm-proxy \- Start only the proxy server without starting processes
+.SH SYNOPSIS
+.B realm proxy
+.SH DESCRIPTION
+.B realm proxy
+starts only the HTTP proxy server component of realm, without launching any of the configured processes. This is useful for development scenarios where you want to manage processes manually but still benefit from the intelligent routing and proxy features.
+
+The proxy server provides:
+.IP \(bu 2
+HTTP request routing based on URL patterns
+.IP \(bu 2
+WebSocket support for real-time applications
+.IP \(bu 2
+CORS headers for cross-origin development
+.IP \(bu 2
+Load balancing between multiple process instances
+.IP \(bu 2
+Health check endpoint
+.SH USE CASES
+.TP
+.B Manual Process Management
+When you want to start processes individually in separate terminals for debugging
+.TP
+.B External Process Integration
+When integrating with processes not managed by realm
+.TP
+.B Testing Proxy Configuration
+To test routing rules without starting the actual services
+.TP
+.B Development Debugging
+To isolate proxy issues from process startup issues
+.SH ROUTING
+The proxy routes requests based on the configuration in realm.yml:
+.IP 1. 3
+Exact path matches take highest priority
+.IP 2. 3
+Prefix matches with wildcards (using * syntax)
+.IP 3. 3
+Fallback to root route (/) if configured
+.IP 4. 3
+404 response if no route matches
+.SH FEATURES
+.TP
+.B Health Check
+Built-in health endpoint at /health returns "healthy" status
+.TP
+.B CORS Support
+Automatically adds CORS headers for cross-origin development:
+.nf
+.RS
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Headers: Content-Type, Authorization
+.RE
+.fi
+.TP
+.B Error Handling
+Provides helpful error pages for:
+.IP \(bu 2
+404 Not Found - when no route matches
+.IP \(bu 2
+502 Bad Gateway - when target service is unavailable
+.IP \(bu 2
+400 Bad Request - when request processing fails
+.SH CONFIGURATION
+The proxy reads configuration from realm.yml, specifically:
+.IP \(bu 2
+proxy_port: Port to bind the proxy server (default: 8080)
+.IP \(bu 2
+processes: Process definitions with ports and routes
+.SH EXAMPLES
+.PP
+Start only the proxy server:
+.nf
+.RS
+realm proxy
+.RE
+.fi
+.PP
+Example output:
+.nf
+.RS
+🌐 Starting proxy server...
+🚀 Realm proxy server started on http://localhost:8080
+📋 Routes configured:
+   /api/* → backend:3001
+   /static/* → assets:3002
+   / → frontend:3000
+.RE
+.fi
+.PP
+Manual process workflow:
+.nf
+.RS
+# Terminal 1: Start proxy
+realm proxy
+
+# Terminal 2: Start backend manually
+cd backend && npm run dev
+
+# Terminal 3: Start frontend manually  
+cd frontend && npm run dev
+.RE
+.fi
+.SH TESTING ROUTES
+You can test the proxy routing with curl:
+.PP
+.nf
+.RS
+# Test health endpoint
+curl http://localhost:8080/health
+
+# Test API route (should proxy to backend)
+curl http://localhost:8080/api/users
+
+# Test static file route
+curl http://localhost:8080/static/logo.png
+
+# Test default route (should proxy to frontend)
+curl http://localhost:8080/
+.RE
+.fi
+.SH TROUBLESHOOTING
+.TP
+.B "Port already in use"
+Another service is using the configured proxy_port. Change the port in realm.yml or stop the conflicting service
+.TP
+.B "502 Bad Gateway"
+The target process is not running. Start the process manually or check if it's listening on the expected port
+.TP
+.B "No route found"
+The requested path doesn't match any configured routes. Check your routing configuration in realm.yml
+.TP
+.B "realm.yml not found"
+Ensure you're in a project directory with a valid realm.yml configuration file
+.SH LOGS
+The proxy logs all requests and errors to stdout:
+.IP \(bu 2
+Successful requests show the route match and target
+.IP \(bu 2
+Failed requests show error details and status codes
+.IP \(bu 2
+Process connection failures are logged with target information
+.SH FILES
+.TP
+.I realm.yml
+Configuration file defining proxy port, processes, and routes
+.SH EXIT STATUS
+.TP
+.B 0
+Proxy server started successfully (runs until interrupted)
+.TP
+.B 1
+Error during startup or configuration loading
+.SH SEE ALSO
+.BR realm (1),
+.BR realm-start (1),
+.BR realm-stop (1),
+.BR realm.yml (5),
+.BR curl (1)
+.SH AUTHOR
+Written for full-stack development workflow optimization.

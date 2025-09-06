@@ -1,0 +1,208 @@
+.TH REALM-BUNDLE 1 "2024" "realm 0.1.0" "User Commands"
+.SH NAME
+realm-bundle \- Create deployment bundle with Docker and nginx configuration
+.SH SYNOPSIS
+.B realm bundle
+.SH DESCRIPTION
+.B realm bundle
+creates a complete deployment bundle from your realm project. This includes Docker containers for all processes, an nginx reverse proxy configuration, and orchestration files for production deployment.
+
+The bundling process:
+.IP 1. 3
+Analyzes the realm.yml configuration
+.IP 2. 3
+Creates Dockerfiles for each process
+.IP 3. 3
+Generates nginx configuration for routing
+.IP 4. 3
+Creates docker-compose.yml for orchestration
+.IP 5. 3
+Packages everything into deployment artifacts
+.SH OUTPUT FILES
+The bundle command creates several files for deployment:
+.TP
+.B Dockerfile.[process]
+Individual Dockerfile for each process defined in realm.yml
+.TP
+.B docker-compose.yml
+Orchestration file defining all services and their relationships
+.TP
+.B nginx.conf
+Nginx reverse proxy configuration matching realm routes
+.TP
+.B .dockerignore
+Optimized ignore file to reduce image size
+.TP
+.B deploy/
+Directory containing all deployment artifacts
+.SH DOCKER CONTAINERS
+Each process gets its own optimized Docker container:
+.IP \(bu 2
+Multi-stage builds for smaller production images
+.IP \(bu 2
+Runtime detection (Bun vs Node.js) based on realm configuration
+.IP \(bu 2
+Security hardening with non-root users
+.IP \(bu 2
+Optimized layer caching for faster builds
+.IP \(bu 2
+Health checks and proper signal handling
+.SH NGINX CONFIGURATION
+The generated nginx configuration provides:
+.IP \(bu 2
+Exact route mapping from realm.yml
+.IP \(bu 2
+WebSocket support for real-time features
+.IP \(bu 2
+Gzip compression for better performance
+.IP \(bu 2
+Security headers and rate limiting
+.IP \(bu 2
+SSL/TLS termination support
+.IP \(bu 2
+Load balancing for scalable services
+.SH ENVIRONMENT HANDLING
+Environment variables are handled securely:
+.IP \(bu 2
+Sensitive variables use Docker secrets
+.IP \(bu 2
+Build-time vs runtime variables are separated
+.IP \(bu 2
+Environment-specific overrides supported
+.IP \(bu 2
+.env files are properly excluded from images
+.SH DEPLOYMENT TARGETS
+The bundle supports multiple deployment platforms:
+.TP
+.B Docker Compose
+For local and simple server deployments
+.TP
+.B Kubernetes
+Generates Kubernetes manifests (with --kubernetes flag, if implemented)
+.TP
+.B Cloud Platforms
+Compatible with Docker-based cloud services (AWS ECS, Google Cloud Run, etc.)
+.SH EXAMPLES
+.PP
+Create deployment bundle for current project:
+.nf
+.RS
+realm bundle
+.RE
+.fi
+.PP
+Example output:
+.nf
+.RS
+📦 Creating deployment bundle...
+   🔨 Building Dockerfile.frontend
+   🔨 Building Dockerfile.backend
+   ⚙️  Generating nginx.conf
+   🐳 Creating docker-compose.yml
+   📋 Writing .dockerignore
+✅ Deployment bundle created in ./deploy/
+.RE
+.fi
+.PP
+Deploy using the generated files:
+.nf
+.RS
+# Build all images
+docker-compose build
+
+# Start the application
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+.RE
+.fi
+.SH OPTIMIZATION
+The bundler includes several optimizations:
+.IP \(bu 2
+Multi-stage Docker builds to minimize image size
+.IP \(bu 2
+Layer caching optimization for faster rebuilds
+.IP \(bu 2
+Dependency caching between builds
+.IP \(bu 2
+Production-only dependencies in final images
+.IP \(bu 2
+Static asset optimization and compression
+.SH SECURITY
+Security features include:
+.IP \(bu 2
+Non-root user execution in containers
+.IP \(bu 2
+Minimal base images (Alpine Linux)
+.IP \(bu 2
+Secret management for sensitive data
+.IP \(bu 2
+Network isolation between services
+.IP \(bu 2
+Read-only file systems where possible
+.SH CUSTOMIZATION
+You can customize the bundle by:
+.IP \(bu 2
+Adding custom Dockerfile templates
+.IP \(bu 2
+Providing nginx configuration overrides
+.IP \(bu 2
+Setting deployment-specific environment variables
+.IP \(bu 2
+Including additional Docker Compose services
+.SH TROUBLESHOOTING
+.TP
+.B "realm.yml not found"
+Ensure you're in a project directory with realm.yml configuration
+.TP
+.B "Build context too large"
+Add more patterns to .dockerignore to exclude unnecessary files
+.TP
+.B "Port conflicts"
+Ensure the ports in realm.yml don't conflict with system services
+.TP
+.B "Missing dependencies"
+Make sure all package.json files have complete dependency lists
+.SH DEPLOYMENT WORKFLOW
+Typical deployment workflow:
+.IP 1. 3
+Development: \fBrealm start\fR for local development
+.IP 2. 3
+Bundling: \fBrealm bundle\fR to create deployment artifacts
+.IP 3. 3
+Testing: \fBdocker-compose up\fR to test the bundle locally
+.IP 4. 3
+Deployment: Deploy to your target platform using the generated files
+.SH FILES
+.TP
+.I realm.yml
+Source configuration file
+.TP
+.I deploy/
+Output directory containing all deployment artifacts
+.TP
+.I Dockerfile.*
+Generated Dockerfiles for each process
+.TP
+.I docker-compose.yml
+Generated orchestration file
+.TP
+.I nginx.conf
+Generated reverse proxy configuration
+.SH EXIT STATUS
+.TP
+.B 0
+Bundle created successfully
+.TP
+.B 1
+Error during bundle creation
+.SH SEE ALSO
+.BR realm (1),
+.BR realm-start (1),
+.BR realm.yml (5),
+.BR docker (1),
+.BR docker-compose (1),
+.BR nginx (8)
+.SH AUTHOR
+Written for full-stack development workflow optimization.

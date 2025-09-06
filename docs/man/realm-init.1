@@ -1,0 +1,159 @@
+.TH REALM-INIT 1 "2024" "realm 0.1.0" "User Commands"
+.SH NAME
+realm-init \- Initialize a new realm development environment
+.SH SYNOPSIS
+.B realm init
+[\fIPATH\fR] [\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B realm init
+creates a new isolated development environment at the specified path. This environment includes runtime installation, activation scripts, and directory structure for full-stack development.
+
+The initialization process:
+.IP 1. 3
+Creates the environment directory structure
+.IP 2. 3
+Downloads and installs the specified runtime version
+.IP 3. 3
+Creates activation scripts
+.IP 4. 3
+Optionally scaffolds a project from a template
+.IP 5. 3
+Sets up the realm configuration
+.SH OPTIONS
+.TP
+.I PATH
+Path for the realm environment (default: .venv)
+.TP
+.BR \-\-runtime " " \fISPEC\fR
+Runtime to use. Can be just the name or include version specification.
+.br
+Examples: bun, node, bun@1.0.0, node@18
+.br
+Default: bun
+.TP
+.BR \-\-template " " \fINAME\fR
+Template to use for project scaffolding. Available templates:
+.RS
+.IP \(bu 2
+react - React frontend with Express backend
+.IP \(bu 2
+svelte - Svelte frontend with Fastify backend
+.IP \(bu 2
+vue - Vue.js frontend with Express backend  
+.IP \(bu 2
+nextjs - Next.js full-stack application
+.RE
+.TP
+.BR \-h ", " \-\-help
+Print help information
+.SH RUNTIME SPECIFICATIONS
+Runtime specifications can include version numbers:
+.TP
+.B bun
+Latest stable Bun release
+.TP
+.B bun@1.0.0
+Specific Bun version 1.0.0
+.TP
+.B node
+Latest LTS Node.js release
+.TP
+.B node@18
+Latest Node.js v18.x release
+.TP
+.B node@18.17.0
+Specific Node.js version 18.17.0
+.SH DIRECTORY STRUCTURE
+After initialization, the realm environment contains:
+.PP
+.nf
+.RS
+.venv/
+├── bin/
+│   └── activate          # Environment activation script
+├── runtimes/
+│   └── [runtime-version] # Installed runtime binaries
+└── lib/
+    └── realm/            # Realm-specific libraries
+.RE
+.fi
+.SH TEMPLATES
+Templates provide complete project scaffolding with:
+.IP \(bu 2
+Frontend and backend code structure
+.IP \(bu 2
+Pre-configured realm.yml
+.IP \(bu 2
+Package.json with appropriate dependencies
+.IP \(bu 2
+Development and build scripts
+.IP \(bu 2
+Docker configuration for deployment
+.PP
+Use \fBrealm templates list\fR to see all available templates.
+.SH EXAMPLES
+.PP
+Initialize with default settings (Bun runtime, no template):
+.nf
+.RS
+realm init
+.RE
+.fi
+.PP
+Initialize with custom path and Node.js:
+.nf
+.RS
+realm init myproject --runtime node@18
+.RE
+.fi
+.PP
+Initialize with React template and specific Bun version:
+.nf
+.RS
+realm init --runtime bun@1.0.0 --template react
+.RE
+.fi
+.PP
+Initialize in subdirectory with Vue template:
+.nf
+.RS
+realm init ./environments/dev --template vue
+.RE
+.fi
+.SH ENVIRONMENT ACTIVATION
+After initialization, activate the environment:
+.PP
+.nf
+.RS
+source .venv/bin/activate
+.RE
+.fi
+.PP
+This modifies your shell to use the realm environment's runtime and tools.
+.SH FILES
+.TP
+.I PATH/bin/activate
+Shell activation script that sets up the environment
+.TP
+.I PATH/runtimes/
+Directory containing downloaded runtime versions
+.TP
+.I realm.yml
+Configuration file created when using templates
+.TP
+.I project/
+Project directory created when using templates
+.SH EXIT STATUS
+.TP
+.B 0
+Successful initialization
+.TP
+.B 1
+Error during initialization (network issues, permission problems, etc.)
+.SH SEE ALSO
+.BR realm (1),
+.BR realm-start (1),
+.BR realm-templates (1),
+.BR realm.yml (5)
+.SH AUTHOR
+Written for full-stack development workflow optimization.

@@ -1,0 +1,117 @@
+.TH REALM 1 "2024" "realm 0.1.0" "User Commands"
+.SH NAME
+realm \- Full-stack development environment CLI with built-in proxy
+.SH SYNOPSIS
+.B realm
+[\fIOPTION\fR]... \fICOMMAND\fR [\fIARG\fR]...
+.SH DESCRIPTION
+.B realm
+is a virtualenv-like tool for full-stack development that provides isolated environments with built-in process management, proxy routing, and multi-runtime support. It eliminates the need for complex nginx configurations and multiple terminal windows by providing an integrated development experience.
+
+Realm creates isolated development environments similar to Python's virtualenv, but designed specifically for full-stack JavaScript/TypeScript applications. Each realm environment includes its own runtime installation, process management, and proxy server configuration.
+.SH COMMANDS
+.TP
+.BR init " [" \fIPATH\fR "] [" \fIOPTIONS\fR "]"
+Initialize a new realm environment at the specified path (default: .venv)
+.TP
+.BR start
+Start all processes and proxy server in the current realm environment
+.TP
+.BR stop
+Stop all processes and proxy server in the current realm environment
+.TP
+.BR proxy
+Start only the proxy server without starting processes
+.TP
+.BR bundle
+Create deployment bundle with Docker and nginx configuration
+.TP
+.BR create " --template " \fINAME\fR
+Create a new template from the current project
+.TP
+.BR templates " " \fISUBCOMMAND\fR
+Template management commands
+.SH GLOBAL OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Print help information
+.TP
+.BR \-V ", " \-\-version
+Print version information
+.SH ENVIRONMENT ACTIVATION
+After initializing a realm environment, you must activate it before use:
+.PP
+.nf
+.RS
+source .venv/bin/activate
+.RE
+.fi
+.PP
+This sets up the necessary environment variables and PATH modifications to use the realm environment.
+.SH CONFIGURATION FILE
+Realm uses a \fBrealm.yml\fR configuration file in the project root to define:
+.IP \(bu 2
+Environment variables
+.IP \(bu 2
+Process definitions with ports and routes
+.IP \(bu 2
+Proxy server configuration
+.IP \(bu 2
+Runtime specifications
+.PP
+See \fBrealm.yml\fR(5) for detailed configuration format.
+.SH FILES
+.TP
+.I realm.yml
+Main configuration file defining processes, routes, and environment
+.TP
+.I .venv/
+Default realm environment directory (can be customized)
+.TP
+.I .venv/bin/activate
+Shell activation script
+.TP
+.I .venv/runtimes/
+Directory containing installed runtime versions
+.SH EXAMPLES
+.PP
+Initialize a new realm environment with Bun runtime:
+.nf
+.RS
+realm init --runtime bun
+.RE
+.fi
+.PP
+Initialize with specific Node.js version and template:
+.nf
+.RS
+realm init --runtime node@18 --template react
+.RE
+.fi
+.PP
+Activate environment and start all services:
+.nf
+.RS
+source .venv/bin/activate
+realm start
+.RE
+.fi
+.PP
+Create deployment bundle:
+.nf
+.RS
+realm bundle
+.RE
+.fi
+.SH SEE ALSO
+.BR realm-init (1),
+.BR realm-start (1),
+.BR realm-stop (1),
+.BR realm-proxy (1),
+.BR realm-bundle (1),
+.BR realm-templates (1),
+.BR realm.yml (5)
+.SH AUTHOR
+Written for full-stack development workflow optimization.
+.SH REPORTING BUGS
+Report bugs and issues at the project repository.

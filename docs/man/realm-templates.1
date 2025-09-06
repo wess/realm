@@ -1,0 +1,243 @@
+.TH REALM-TEMPLATES 1 "2024" "realm 0.1.0" "User Commands"
+.SH NAME
+realm-templates \- Template management commands for realm projects
+.SH SYNOPSIS
+.B realm templates
+\fICOMMAND\fR [\fIARGS\fR]...
+.br
+.B realm create
+--template \fINAME\fR
+.SH DESCRIPTION
+.B realm templates
+provides commands for managing project templates. Templates are pre-configured project structures that include frontend and backend code, configuration files, and deployment setups.
+
+Templates eliminate the need to manually configure full-stack projects by providing complete, working examples that follow best practices for each technology stack.
+.SH COMMANDS
+.TP
+.BR templates " " list
+List all available templates (both built-in and custom)
+.TP
+.BR create " --template " \fINAME\fR
+Create a new custom template from the current project directory
+.SH BUILT-IN TEMPLATES
+Realm includes several built-in templates:
+.TP
+.B react
+React frontend with Express backend
+.RS
+.IP \(bu 2
+React 18 with TypeScript
+.IP \(bu 2
+Express.js REST API
+.IP \(bu 2
+Shared TypeScript types
+.IP \(bu 2
+Development and production configurations
+.IP \(bu 2
+Docker deployment setup
+.RE
+.TP
+.B svelte
+Svelte frontend with Fastify backend
+.RS
+.IP \(bu 2
+SvelteKit with TypeScript
+.IP \(bu 2
+Fastify high-performance API
+.IP \(bu 2
+Optimized build pipeline
+.IP \(bu 2
+Hot module replacement
+.RE
+.TP
+.B vue
+Vue.js frontend with Express backend
+.RS
+.IP \(bu 2
+Vue 3 with Composition API
+.IP \(bu 2
+Express.js with middleware setup
+.IP \(bu 2
+Vue Router and state management
+.IP \(bu 2
+Production optimization
+.RE
+.TP
+.B nextjs
+Next.js full-stack application
+.RS
+.IP \(bu 2
+Next.js 13+ with App Router
+.IP \(bu 2
+API routes and server components
+.IP \(bu 2
+TypeScript throughout
+.IP \(bu 2
+Optimized deployment configuration
+.RE
+.SH TEMPLATE STRUCTURE
+Each template includes:
+.TP
+.B Source Code
+Complete frontend and backend implementations with example features
+.TP
+.B Configuration Files
+.RS
+.IP \(bu 2
+realm.yml with proper process and routing configuration
+.IP \(bu 2
+package.json files with all necessary dependencies
+.IP \(bu 2
+TypeScript configurations
+.IP \(bu 2
+Build and development scripts
+.RE
+.TP
+.B Development Setup
+.RS
+.IP \(bu 2
+Hot reload configuration
+.IP \(bu 2
+Proxy routing between frontend and backend
+.IP \(bu 2
+Environment variable templates
+.IP \(bu 2
+Development tooling (linters, formatters)
+.RE
+.TP
+.B Deployment Configuration
+.RS
+.IP \(bu 2
+Dockerfile for each service
+.IP \(bu 2
+docker-compose.yml for local deployment
+.IP \(bu 2
+nginx configuration for production
+.IP \(bu 2
+CI/CD pipeline examples
+.RE
+.SH CUSTOM TEMPLATES
+Create custom templates from existing projects:
+.TP
+.B Template Creation Process
+.IP 1. 3
+Navigate to your project directory
+.IP 2. 3
+Ensure it has a proper realm.yml configuration
+.IP 3. 3
+Run \fBrealm create --template mytemplate\fR
+.IP 4. 3
+Template is saved and can be used with \fBrealm init --template mytemplate\fR
+.TP
+.B Template Storage
+Custom templates are stored in:
+.nf
+.RS
+~/.realm/templates/[template-name]/
+.RE
+.fi
+.SH EXAMPLES
+.PP
+List all available templates:
+.nf
+.RS
+realm templates list
+.RE
+.fi
+.PP
+Example output:
+.nf
+.RS
+📄 Available templates:
+   • react
+   • svelte  
+   • vue
+   • nextjs
+   • my-custom-template
+.RE
+.fi
+.PP
+Create a new project from a template:
+.nf
+.RS
+realm init --template react
+.RE
+.fi
+.PP
+Create a custom template from current project:
+.nf
+.RS
+realm create --template my-stack
+.RE
+.fi
+.PP
+Use the custom template:
+.nf
+.RS
+realm init --template my-stack myproject
+.RE
+.fi
+.SH TEMPLATE DEVELOPMENT
+When creating templates, ensure:
+.TP
+.B Complete Configuration
+Include all necessary configuration files (realm.yml, package.json, etc.)
+.TP
+.B Working Examples
+Provide functional example code, not just boilerplate
+.TP
+.B Documentation
+Include README files explaining the template structure
+.TP
+.B Environment Variables
+Use template variables for customizable values
+.TP
+.B Build Scripts
+Include complete build and development scripts
+.SH TEMPLATE VARIABLES
+Templates can use placeholder variables that are replaced during initialization:
+.TP
+.B {{project_name}}
+Replaced with the project name
+.TP
+.B {{author}}
+Replaced with the current user
+.TP
+.B {{runtime}}
+Replaced with the selected runtime (bun/node)
+.SH TROUBLESHOOTING
+.TP
+.B "Template not found"
+Check template name spelling or run \fBrealm templates list\fR to see available templates
+.TP
+.B "Invalid template structure"
+Custom templates must have a valid realm.yml file
+.TP
+.B "Permission denied"
+Template directory may not have proper permissions
+.TP
+.B "Template creation failed"
+Ensure current project has a complete structure before creating template
+.SH FILES
+.TP
+.I ~/.realm/templates/
+Directory containing custom templates
+.TP
+.I realm.yml
+Required configuration file in each template
+.TP
+.I package.json
+Required package configuration for each service in template
+.SH EXIT STATUS
+.TP
+.B 0
+Command completed successfully
+.TP
+.B 1
+Error during template operation
+.SH SEE ALSO
+.BR realm (1),
+.BR realm-init (1),
+.BR realm.yml (5)
+.SH AUTHOR
+Written for full-stack development workflow optimization.

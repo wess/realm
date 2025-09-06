@@ -1,0 +1,302 @@
+.TH REALM.YML 5 "2024" "realm 0.1.0" "File Formats"
+.SH NAME
+realm.yml \- Configuration file format for realm development environments
+.SH SYNOPSIS
+.B realm.yml
+.SH DESCRIPTION
+.B realm.yml
+is a YAML configuration file that defines the structure and behavior of a realm development environment. It specifies processes, routing rules, environment variables, and proxy server settings.
+
+The configuration file is typically located in the project root directory and is automatically loaded by realm commands.
+.SH FILE FORMAT
+The realm.yml file uses standard YAML syntax with the following top-level sections:
+.TP
+.B env
+Environment variables to set for all processes
+.TP
+.B env_file
+Path to a .env file for additional environment variables
+.TP
+.B proxy_port
+Port number for the built-in proxy server (default: 8080)
+.TP
+.B processes
+Dictionary of process definitions with their configuration
+.SH ENVIRONMENT VARIABLES
+Environment variables can be defined in two ways:
+.SS Direct Definition
+.nf
+.RS
+env:
+  NODE_ENV: development
+  API_URL: http://localhost:3001
+  DEBUG: "app:*"
+.RE
+.fi
+.SS External File
+.nf
+.RS
+env_file: .env
+.RE
+.fi
+Environment variables from env_file are loaded after direct definitions, allowing file-based variables to override inline ones.
+.SH PROXY CONFIGURATION
+.SS Proxy Port
+.nf
+.RS
+proxy_port: 8080
+.RE
+.fi
+Defines the port where the proxy server listens. Defaults to 8080 if not specified.
+.SH PROCESS DEFINITIONS
+Each process is defined with the following structure:
+.SS Basic Process
+.nf
+.RS
+processes:
+  frontend:
+    cmd: npm run dev
+    port: 3000
+    routes:
+      - "/"
+      - "/static/*"
+.RE
+.fi
+.SS Complete Process Definition
+.nf
+.RS
+processes:
+  backend:
+    cmd: npm run start:dev
+    port: 3001
+    routes:
+      - "/api/*"
+      - "/auth/*"
+    env:
+      PORT: "3001"
+      NODE_ENV: development
+    working_dir: ./backend
+    dependencies:
+      - database
+.RE
+.fi
+.SH PROCESS FIELDS
+.TP
+.B cmd
+Command to execute for this process (required)
+.TP
+.B port
+Port number where the process listens (optional, default: 3000)
+.TP
+.B routes
+Array of URL patterns this process should handle (required)
+.TP
+.B env
+Process-specific environment variables (optional)
+.TP
+.B working_dir
+Directory to run the command from (optional, default: current directory)
+.TP
+.B dependencies
+Array of other processes this process depends on (optional)
+.SH ROUTING PATTERNS
+Routes define which URL patterns are proxied to each process:
+.TP
+.B Exact Match
+.nf
+.RS
+routes:
+  - "/api/health"
+  - "/auth/login"
+.RE
+.fi
+Matches the exact path only.
+.TP
+.B Wildcard Match
+.nf
+.RS
+routes:
+  - "/api/*"
+  - "/static/*"
+.RE
+.fi
+Matches the prefix and any subpaths.
+.TP
+.B Root Fallback
+.nf
+.RS
+routes:
+  - "/"
+.RE
+.fi
+Catches all requests not matched by other routes.
+.SH ROUTING PRIORITY
+Routes are processed with the following priority:
+.IP 1. 3
+Exact path matches (highest priority)
+.IP 2. 3
+Longest prefix matches first
+.IP 3. 3
+Wildcard routes by specificity
+.IP 4. 3
+Root route ("/") as fallback (lowest priority)
+.SH COMPLETE EXAMPLE
+.nf
+.RS
+# Environment variables for all processes
+env:
+  NODE_ENV: development
+  LOG_LEVEL: debug
+
+# Load additional variables from .env file
+env_file: .env
+
+# Proxy server port
+proxy_port: 8080
+
+# Process definitions
+processes:
+  # Frontend React application
+  frontend:
+    cmd: npm run dev
+    port: 3000
+    routes:
+      - "/"
+      - "/static/*"
+      - "/assets/*"
+    working_dir: ./frontend
+    env:
+      REACT_APP_API_URL: http://localhost:8080/api
+
+  # Backend API server
+  backend:
+    cmd: npm run start:dev
+    port: 3001
+    routes:
+      - "/api/*"
+      - "/health"
+    working_dir: ./backend
+    env:
+      PORT: "3001"
+      DATABASE_URL: postgresql://localhost:5432/myapp
+    dependencies:
+      - database
+
+  # Database service
+  database:
+    cmd: docker run --rm -p 5432:5432 postgres:15
+    port: 5432
+    routes: []
+    env:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev123
+
+  # WebSocket service
+  websocket:
+    cmd: node websocket-server.js
+    port: 3002
+    routes:
+      - "/ws/*"
+      - "/socket.io/*"
+    working_dir: ./websocket
+    env:
+      WS_PORT: "3002"
+.RE
+.fi
+.SH ENVIRONMENT VARIABLE PRECEDENCE
+Environment variables are applied in this order (later overrides earlier):
+.IP 1. 3
+System environment variables
+.IP 2. 3
+Variables from realm.yml env section
+.IP 3. 3
+Variables from env_file (if specified)
+.IP 4. 3
+Process-specific env variables
+.SH WORKING DIRECTORY
+The working_dir field specifies where each process command runs:
+.IP \(bu 2
+Relative paths are relative to the realm.yml location
+.IP \(bu 2
+Absolute paths are used as-is
+.IP \(bu 2
+If not specified, commands run from the realm.yml directory
+.SH PROCESS DEPENDENCIES
+Dependencies ensure processes start in the correct order:
+.nf
+.RS
+processes:
+  backend:
+    cmd: npm start
+    dependencies:
+      - database
+      - redis
+  
+  database:
+    cmd: docker run postgres
+  
+  redis:
+    cmd: docker run redis
+.RE
+.fi
+In this example, database and redis start first, then backend starts after they're ready.
+.SH VALIDATION
+The realm.yml file is validated for:
+.IP \(bu 2
+Valid YAML syntax
+.IP \(bu 2
+Required fields (cmd and routes for each process)
+.IP \(bu 2
+Port number ranges (1-65535)
+.IP \(bu 2
+Route pattern syntax
+.IP \(bu 2
+Circular dependency detection
+.SH ERROR HANDLING
+Common configuration errors:
+.TP
+.B Invalid YAML syntax
+Check for proper indentation and quoting
+.TP
+.B Missing required fields
+Each process must have cmd and routes
+.TP
+.B Port conflicts
+Ensure no two processes use the same port
+.TP
+.B Circular dependencies
+Dependencies cannot form loops
+.TP
+.B Invalid route patterns
+Routes must be valid URL patterns
+.SH BEST PRACTICES
+.TP
+.B Use consistent indentation
+Stick to 2 spaces throughout the file
+.TP
+.B Quote numeric strings
+Port numbers in env should be quoted: "3000"
+.TP
+.B Organize by function
+Group related processes together
+.TP
+.B Document complex configurations
+Use YAML comments for clarity
+.TP
+.B Avoid hardcoded URLs
+Use environment variables for configuration
+.SH FILES
+.TP
+.I realm.yml
+Main configuration file (required)
+.TP
+.I .env
+Optional environment file (if referenced)
+.SH SEE ALSO
+.BR realm (1),
+.BR realm-init (1),
+.BR realm-start (1),
+.BR yaml (1)
+.SH AUTHOR
+Written for full-stack development workflow optimization.

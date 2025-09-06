@@ -1,0 +1,127 @@
+.TH REALM-STOP 1 "2024" "realm 0.1.0" "User Commands"
+.SH NAME
+realm-stop \- Stop all processes and proxy server in a realm environment
+.SH SYNOPSIS
+.B realm stop
+.SH DESCRIPTION
+.B realm stop
+gracefully shuts down all running processes and the proxy server in the current realm environment. This command can be run from any terminal, whether or not the realm environment is activated.
+
+The shutdown sequence:
+.IP 1. 3
+Loads configuration from realm.yml
+.IP 2. 3
+Identifies all running realm processes
+.IP 3. 3
+Sends SIGTERM to each process for graceful shutdown
+.IP 4. 3
+Waits for processes to terminate
+.IP 5. 3
+Forces termination (SIGKILL) if processes don't respond
+.IP 6. 3
+Cleans up any remaining resources
+.SH PROCESS TERMINATION
+The stop command uses a graceful shutdown approach:
+.IP \(bu 2
+Sends SIGTERM first to allow processes to clean up
+.IP \(bu 2
+Waits up to 10 seconds for graceful termination
+.IP \(bu 2
+Uses SIGKILL as a last resort for unresponsive processes
+.IP \(bu 2
+Ensures all child processes are terminated
+.SH PROXY SERVER
+The proxy server is stopped by:
+.IP \(bu 2
+Closing all active connections
+.IP \(bu 2
+Releasing the bound port
+.IP \(bu 2
+Cleaning up routing tables and process references
+.SH OUTPUT
+When stopping, realm displays:
+.IP \(bu 2
+List of processes being terminated
+.IP \(bu 2
+Confirmation when each process stops
+.IP \(bu 2
+Final status message
+.SH EXAMPLES
+.PP
+Stop all processes in the current project:
+.nf
+.RS
+realm stop
+.RE
+.fi
+.PP
+Example output:
+.nf
+.RS
+🛑 Stopping realm environment...
+   ⏹️  Stopping frontend (PID 12345)
+   ⏹️  Stopping backend (PID 12346)
+   ⏹️  Stopping proxy server (PID 12347)
+✅ All processes stopped
+.RE
+.fi
+.SH CLEANUP
+The stop command ensures:
+.IP \(bu 2
+All process IDs are tracked and terminated
+.IP \(bu 2
+Network ports are released
+.IP \(bu 2
+Temporary files are cleaned up
+.IP \(bu 2
+No orphaned processes remain
+.SH TROUBLESHOOTING
+.TP
+.B "realm.yml not found"
+Ensure you're in a project directory with realm.yml configuration
+.TP
+.B "No processes to stop"
+All processes may already be stopped, or none were started
+.TP
+.B "Process won't terminate"
+Some processes may be hung; the command will force-kill after timeout
+.TP
+.B "Permission denied"
+You may not have permission to terminate processes started by another user
+.SH FORCE TERMINATION
+If processes don't respond to SIGTERM within the timeout period:
+.IP \(bu 2
+The command automatically escalates to SIGKILL
+.IP \(bu 2
+A warning is displayed about forced termination
+.IP \(bu 2
+This may result in incomplete cleanup by the terminated processes
+.SH ALTERNATIVES
+.TP
+.B Ctrl+C
+If realm start is running in the foreground, Ctrl+C will also stop all processes
+.TP
+.B System tools
+You can also use standard system tools like \fBkill\fR or \fBpkill\fR, but realm stop is recommended for proper cleanup
+.SH FILES
+.TP
+.I realm.yml
+Configuration file used to identify managed processes
+.TP
+.I .realm/
+Directory containing process tracking information (if exists)
+.SH EXIT STATUS
+.TP
+.B 0
+All processes stopped successfully
+.TP
+.B 1
+Error during shutdown or configuration loading
+.SH SEE ALSO
+.BR realm (1),
+.BR realm-start (1),
+.BR realm-proxy (1),
+.BR kill (1),
+.BR pkill (1)
+.SH AUTHOR
+Written for full-stack development workflow optimization.

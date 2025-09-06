@@ -1,0 +1,147 @@
+.TH REALM-START 1 "2024" "realm 0.1.0" "User Commands"
+.SH NAME
+realm-start \- Start all processes and proxy server in a realm environment
+.SH SYNOPSIS
+.B realm start
+.SH DESCRIPTION
+.B realm start
+launches the complete development environment by starting all configured processes and the proxy server. This command must be run from within an activated realm environment.
+
+The startup sequence:
+.IP 1. 3
+Validates the realm environment is activated
+.IP 2. 3
+Loads configuration from realm.yml
+.IP 3. 3
+Sets up environment variables
+.IP 4. 3
+Starts all defined processes in the background
+.IP 5. 3
+Starts the HTTP proxy server
+.IP 6. 3
+Displays routing information and runs until interrupted
+.SH PREREQUISITES
+.TP
+.B Activated Environment
+Must be run within an activated realm environment:
+.nf
+.RS
+source .venv/bin/activate
+.RE
+.fi
+.TP
+.B Configuration File
+Requires a valid \fBrealm.yml\fR file in the current directory
+.SH PROCESS MANAGEMENT
+.B realm start
+manages multiple processes simultaneously:
+.IP \(bu 2
+Each process runs in its own background thread
+.IP \(bu 2
+Process output is captured and logged
+.IP \(bu 2
+Failed processes are automatically restarted
+.IP \(bu 2
+All processes share the configured environment variables
+.SH PROXY SERVER
+The built-in proxy server provides:
+.IP \(bu 2
+Intelligent request routing based on URL paths
+.IP \(bu 2
+WebSocket support for development servers
+.IP \(bu 2
+CORS headers for cross-origin development
+.IP \(bu 2
+Health check endpoint at /health
+.IP \(bu 2
+Automatic load balancing between process instances
+.SH ROUTING
+Routes are configured in realm.yml and processed with priority:
+.IP 1. 3
+Exact path matches (e.g., /api/health)
+.IP 2. 3
+Prefix matches with wildcards (e.g., /api/*)
+.IP 3. 3
+Fallback to root route (/) if configured
+.SH ENVIRONMENT VARIABLES
+Environment variables are loaded in order:
+.IP 1. 3
+Variables defined in realm.yml env section
+.IP 2. 3
+Variables from .env file if env_file is specified
+.IP 3. 3
+Existing shell environment variables are preserved
+.SH OUTPUT
+When starting, realm displays:
+.IP \(bu 2
+List of processes being started
+.IP \(bu 2
+Proxy server address and port
+.IP \(bu 2
+Complete routing table
+.IP \(bu 2
+Real-time process logs and status
+.SH STOPPING
+To stop all processes and the proxy server:
+.IP \(bu 2
+Press Ctrl+C to gracefully shutdown
+.IP \(bu 2
+Or use \fBrealm stop\fR from another terminal
+.SH EXAMPLES
+.PP
+Basic startup in an activated environment:
+.nf
+.RS
+source .venv/bin/activate
+realm start
+.RE
+.fi
+.PP
+Example output:
+.nf
+.RS
+🚀 Starting realm environment...
+🔧 Starting processes...
+   ✅ frontend (port 3000)
+   ✅ backend (port 3001)
+🌐 Starting proxy server...
+🚀 Realm proxy server started on http://localhost:8080
+📋 Routes configured:
+   /api/* → backend:3001  
+   / → frontend:3000
+.RE
+.fi
+.SH TROUBLESHOOTING
+.TP
+.B "Not in an activated realm environment"
+Run \fBsource .venv/bin/activate\fR first
+.TP
+.B "realm.yml not found"
+Ensure you're in a project directory with realm.yml configuration
+.TP
+.B "Port already in use"
+Check if another process is using the configured ports
+.TP
+.B "Process failed to start"
+Check process logs and ensure all dependencies are installed
+.SH FILES
+.TP
+.I realm.yml
+Configuration file defining processes, routes, and environment
+.TP
+.I .env
+Optional environment file (if specified in realm.yml)
+.SH EXIT STATUS
+.TP
+.B 0
+All processes and proxy started successfully (until interrupted)
+.TP
+.B 1
+Error during startup or configuration loading
+.SH SEE ALSO
+.BR realm (1),
+.BR realm-stop (1),
+.BR realm-proxy (1),
+.BR realm.yml (5)
+.SH AUTHOR
+Written for full-stack development workflow optimization.
