@@ -6,17 +6,17 @@ use std::fs;
 use std::path::Path;
 
 pub fn create_template(templates_dir: &Path) -> Result<()> {
-    let template_dir = templates_dir.join("react-express");
-    if template_dir.exists() {
-        return Ok(());
-    }
+  let template_dir = templates_dir.join("react-express");
+  if template_dir.exists() {
+    return Ok(());
+  }
 
-    fs::create_dir_all(&template_dir)?;
+  fs::create_dir_all(&template_dir)?;
 
-    let files = vec![
-        TemplateFile {
-            path: "frontend/package.json".to_string(),
-            content: r#"{
+  let files = vec![
+    TemplateFile {
+      path: "frontend/package.json".to_string(),
+      content: r#"{
   "name": "frontend",
   "type": "module",
   "scripts": {
@@ -32,12 +32,12 @@ pub fn create_template(templates_dir: &Path) -> Result<()> {
     "vite": "^4.4.0"
   }
 }"#
-            .to_string(),
-            executable: false,
-        },
-        TemplateFile {
-            path: "frontend/vite.config.js".to_string(),
-            content: r#"import { defineConfig } from 'vite'
+        .to_string(),
+      executable: false,
+    },
+    TemplateFile {
+      path: "frontend/vite.config.js".to_string(),
+      content: r#"import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
@@ -47,12 +47,12 @@ export default defineConfig({
   }
 })
 "#
-            .to_string(),
-            executable: false,
-        },
-        TemplateFile {
-            path: "backend/package.json".to_string(),
-            content: r#"{
+      .to_string(),
+      executable: false,
+    },
+    TemplateFile {
+      path: "backend/package.json".to_string(),
+      content: r#"{
   "name": "backend",
   "type": "module",
   "scripts": {
@@ -65,12 +65,12 @@ export default defineConfig({
     "@types/express": "^4.17.0"
   }
 }"#
-            .to_string(),
-            executable: false,
-        },
-        TemplateFile {
-            path: "backend/server.ts".to_string(),
-            content: r#"import express from 'express';
+        .to_string(),
+      executable: false,
+    },
+    TemplateFile {
+      path: "backend/server.ts".to_string(),
+      content: r#"import express from 'express';
 
 const app = express();
 const PORT = 4001;
@@ -85,50 +85,50 @@ app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 "#
-            .to_string(),
-            executable: false,
+      .to_string(),
+      executable: false,
+    },
+  ];
+
+  let realm_config = RealmConfig {
+    env: HashMap::new(),
+    env_file: Some(".env".to_string()),
+    processes: {
+      let mut processes = HashMap::new();
+      processes.insert(
+        "frontend".to_string(),
+        ProcessConfig {
+          command: "bun run dev".to_string(),
+          port: Some(4000),
+          routes: vec!["/".to_string(), "/assets/*".to_string()],
+          working_directory: Some("frontend".to_string()),
         },
-    ];
-
-    let realm_config = RealmConfig {
-        env: HashMap::new(),
-        env_file: Some(".env".to_string()),
-        processes: {
-            let mut processes = HashMap::new();
-            processes.insert(
-                "frontend".to_string(),
-                ProcessConfig {
-                    command: "bun run dev".to_string(),
-                    port: Some(4000),
-                    routes: vec!["/".to_string(), "/assets/*".to_string()],
-                    working_directory: Some("frontend".to_string()),
-                },
-            );
-            processes.insert(
-                "backend".to_string(),
-                ProcessConfig {
-                    command: "bun run dev".to_string(),
-                    port: Some(4001),
-                    routes: vec!["/api/*".to_string()],
-                    working_directory: Some("backend".to_string()),
-                },
-            );
-            processes
+      );
+      processes.insert(
+        "backend".to_string(),
+        ProcessConfig {
+          command: "bun run dev".to_string(),
+          port: Some(4001),
+          routes: vec!["/api/*".to_string()],
+          working_directory: Some("backend".to_string()),
         },
-        proxy_port: 8000,
-    };
+      );
+      processes
+    },
+    proxy_port: 8000,
+  };
 
-    let template = Template {
-        name: "react-express".to_string(),
-        description: "React frontend with Express backend using Bun".to_string(),
-        version: "1.0.0".to_string(),
-        files,
-        realm_config,
-        variables: HashMap::new(),
-    };
+  let template = Template {
+    name: "react-express".to_string(),
+    description: "React frontend with Express backend using Bun".to_string(),
+    version: "1.0.0".to_string(),
+    files,
+    realm_config,
+    variables: HashMap::new(),
+  };
 
-    let template_content = serde_yaml::to_string(&template)?;
-    fs::write(template_dir.join("template.yml"), template_content)?;
+  let template_content = serde_yaml::to_string(&template)?;
+  fs::write(template_dir.join("template.yml"), template_content)?;
 
-    Ok(())
+  Ok(())
 }

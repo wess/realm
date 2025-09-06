@@ -6,17 +6,17 @@ use std::fs;
 use std::path::Path;
 
 pub fn create_template(templates_dir: &Path) -> Result<()> {
-    let template_dir = templates_dir.join("svelte-fastify");
-    if template_dir.exists() {
-        return Ok(());
-    }
+  let template_dir = templates_dir.join("svelte-fastify");
+  if template_dir.exists() {
+    return Ok(());
+  }
 
-    fs::create_dir_all(&template_dir)?;
+  fs::create_dir_all(&template_dir)?;
 
-    let files = vec![
-        TemplateFile {
-            path: "frontend/package.json".to_string(),
-            content: r#"{
+  let files = vec![
+    TemplateFile {
+      path: "frontend/package.json".to_string(),
+      content: r#"{
   "name": "svelte-frontend",
   "type": "module",
   "scripts": {
@@ -33,12 +33,12 @@ pub fn create_template(templates_dir: &Path) -> Result<()> {
     "vite": "^4.4.2"
   }
 }"#
-            .to_string(),
-            executable: false,
-        },
-        TemplateFile {
-            path: "frontend/vite.config.js".to_string(),
-            content: r#"import { sveltekit } from '@sveltejs/kit/vite';
+        .to_string(),
+      executable: false,
+    },
+    TemplateFile {
+      path: "frontend/vite.config.js".to_string(),
+      content: r#"import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -48,12 +48,12 @@ export default defineConfig({
   }
 });
 "#
-            .to_string(),
-            executable: false,
-        },
-        TemplateFile {
-            path: "frontend/src/routes/+page.svelte".to_string(),
-            content: r#"<script>
+      .to_string(),
+      executable: false,
+    },
+    TemplateFile {
+      path: "frontend/src/routes/+page.svelte".to_string(),
+      content: r#"<script>
   import { onMount } from 'svelte';
   
   let message = 'Loading...';
@@ -79,12 +79,12 @@ export default defineConfig({
   }
 </style>
 "#
-            .to_string(),
-            executable: false,
-        },
-        TemplateFile {
-            path: "backend/package.json".to_string(),
-            content: r#"{
+      .to_string(),
+      executable: false,
+    },
+    TemplateFile {
+      path: "backend/package.json".to_string(),
+      content: r#"{
   "name": "fastify-backend",
   "type": "module",
   "scripts": {
@@ -98,12 +98,12 @@ export default defineConfig({
     "@types/node": "^20.0.0"
   }
 }"#
-            .to_string(),
-            executable: false,
-        },
-        TemplateFile {
-            path: "backend/server.ts".to_string(),
-            content: r#"import Fastify from 'fastify';
+        .to_string(),
+      executable: false,
+    },
+    TemplateFile {
+      path: "backend/server.ts".to_string(),
+      content: r#"import Fastify from 'fastify';
 import cors from '@fastify/cors';
 
 const fastify = Fastify({ logger: true });
@@ -143,50 +143,50 @@ const start = async () => {
 
 start();
 "#
-            .to_string(),
-            executable: false,
+      .to_string(),
+      executable: false,
+    },
+  ];
+
+  let realm_config = RealmConfig {
+    env: HashMap::new(),
+    env_file: Some(".env".to_string()),
+    processes: {
+      let mut processes = HashMap::new();
+      processes.insert(
+        "frontend".to_string(),
+        ProcessConfig {
+          command: "bun run dev".to_string(),
+          port: Some(4000),
+          routes: vec!["/".to_string(), "/app/*".to_string(), "/_app/*".to_string()],
+          working_directory: Some("frontend".to_string()),
         },
-    ];
-
-    let realm_config = RealmConfig {
-        env: HashMap::new(),
-        env_file: Some(".env".to_string()),
-        processes: {
-            let mut processes = HashMap::new();
-            processes.insert(
-                "frontend".to_string(),
-                ProcessConfig {
-                    command: "bun run dev".to_string(),
-                    port: Some(4000),
-                    routes: vec!["/".to_string(), "/app/*".to_string(), "/_app/*".to_string()],
-                    working_directory: Some("frontend".to_string()),
-                },
-            );
-            processes.insert(
-                "backend".to_string(),
-                ProcessConfig {
-                    command: "bun run dev".to_string(),
-                    port: Some(4001),
-                    routes: vec!["/api/*".to_string()],
-                    working_directory: Some("backend".to_string()),
-                },
-            );
-            processes
+      );
+      processes.insert(
+        "backend".to_string(),
+        ProcessConfig {
+          command: "bun run dev".to_string(),
+          port: Some(4001),
+          routes: vec!["/api/*".to_string()],
+          working_directory: Some("backend".to_string()),
         },
-        proxy_port: 8000,
-    };
+      );
+      processes
+    },
+    proxy_port: 8000,
+  };
 
-    let template = Template {
-        name: "svelte-fastify".to_string(),
-        description: "SvelteKit frontend with Fastify backend using Bun".to_string(),
-        version: "1.0.0".to_string(),
-        files,
-        realm_config,
-        variables: HashMap::new(),
-    };
+  let template = Template {
+    name: "svelte-fastify".to_string(),
+    description: "SvelteKit frontend with Fastify backend using Bun".to_string(),
+    version: "1.0.0".to_string(),
+    files,
+    realm_config,
+    variables: HashMap::new(),
+  };
 
-    let template_content = serde_yaml::to_string(&template)?;
-    fs::write(template_dir.join("template.yml"), template_content)?;
+  let template_content = serde_yaml::to_string(&template)?;
+  fs::write(template_dir.join("template.yml"), template_content)?;
 
-    Ok(())
+  Ok(())
 }
