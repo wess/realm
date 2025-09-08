@@ -179,7 +179,7 @@ jobs:
             --title "Realm v${{ steps.version.outputs.VERSION }}" \
             --notes-file release_notes.md
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
       
       - name: Upload Release Assets
         run: |
@@ -198,5 +198,5 @@ jobs:
             fi
           done
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 

@@ -268,7 +268,7 @@ cargo install --path .
 - Git (for template management)
 
 ## Contributing
-
+ 
 Realm is built in Rust with a modular architecture:
 
 - `src/cli/` - Command-line interface
