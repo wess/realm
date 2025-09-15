@@ -132,6 +132,8 @@ jobs:
       contents: write
       packages: write
       actions: read
+      issues: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       
@@ -161,49 +163,37 @@ jobs:
           done
       
       - name: Create Release
-        run: |
-          cat > release_notes.md << 'EOF'
-          Realm v${{ steps.version.outputs.VERSION }}
-          
-          ## Changes
-          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
-          
-          ## Installation
-          
-          ### macOS/Linux
-          ```bash
-          curl -sSfL https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/install.sh | bash
-          ```
-          
-          ### Manual Download
-          Download the appropriate binary for your platform below.
-          
-          ## Checksums
-          SHA256 checksums are provided for each binary.
-          EOF
-          
-          gh release create "${{ github.ref_name }}" \
-            --title "Realm v${{ steps.version.outputs.VERSION }}" \
-            --notes-file release_notes.md
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Realm v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          body: |
+            ## Changes
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+            
+            ## Installation
+            
+            ### macOS/Linux
+            ```bash
+            curl -sSfL https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/install.sh | bash
+            ```
+            
+            ### Manual Download
+            Download the appropriate binary for your platform below.
+            
+            ## Checksums
+            SHA256 checksums are provided for each binary.
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Upload Release Assets
-        run: |
-          for asset in artifacts/*; do
-            if [ -f "$asset" ]; then
-              asset_name=$(basename "$asset")
-              echo "Uploading $asset_name"
-              gh release upload "${{ github.ref_name }}" "$asset" --clobber
-            elif [ -d "$asset" ]; then
-              for file in "$asset"/*; do
-                if [ -f "$file" ]; then
-                  echo "Uploading $(basename "$file")"
-                  gh release upload "${{ github.ref_name }}" "$file" --clobber
-                fi
-              done
-            fi
-          done
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/*/*
+            artifacts/*.sha256
+            install.sh
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
