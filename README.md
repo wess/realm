@@ -16,11 +16,41 @@ Realm eliminates the complexity of modern full-stack development by providing:
 - **Project templates** to eliminate boilerplate
 - **One-command deployment** with Docker generation
 
+## Installation
+
+### From crates.io (Recommended)
+```bash
+# Install using cargo
+cargo install realm
+```
+
+### From Source
+```bash
+# Clone and build from source
+git clone https://github.com/wess/realm
+cd realm
+cargo install --path .
+```
+
+### Pre-built Binaries
+Download the latest release for your platform:
+
+- **macOS (Intel)**: [realm-macos-amd64](https://github.com/wess/realm/releases/latest/download/realm-macos-amd64)
+- **macOS (Apple Silicon)**: [realm-macos-arm64](https://github.com/wess/realm/releases/latest/download/realm-macos-arm64)
+- **Linux (x64)**: [realm-linux-amd64](https://github.com/wess/realm/releases/latest/download/realm-linux-amd64)
+- **Linux (ARM64)**: [realm-linux-arm64](https://github.com/wess/realm/releases/latest/download/realm-linux-arm64)
+- **Windows**: [realm-windows-amd64.exe](https://github.com/wess/realm/releases/latest/download/realm-windows-amd64.exe)
+
+### Quick Install Script (macOS/Linux)
+```bash
+curl -sSfL https://github.com/wess/realm/releases/latest/download/install.sh | bash
+```
+
+This will download and install realm to `/usr/local/bin`.
+
 ## Quick Start
 
 ```bash
-# Install Realm
-cargo install realm
 
 # Create a new full-stack project
 realm init myapp --template=react-express --runtime=bun

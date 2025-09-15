@@ -2,14 +2,30 @@
 name = "realm"
 version = "0.1.0"
 edition = "2021"
-description = "Full-stack development environment CLI with built-in proxy"
-authors = ["Realm Contributors"]
+rust-version = "1.75"
+description = "Zero-config development environment with isolated runtimes, process management, and intelligent HTTP proxy"
+authors = ["Wess Cope <wess@frenzylabs.com>"]
 license = "MIT"
 readme = "README.md"
 homepage = "https://github.com/wess/realm"
 repository = "https://github.com/wess/realm"
+documentation = "https://docs.rs/realm"
 keywords = ["development", "environment", "proxy", "process-manager", "cli"]
 categories = ["command-line-utilities", "development-tools", "web-programming"]
+exclude = [
+    ".github/",
+    "tests/",
+    "docs/",
+    "scripts/",
+    "*.md",
+    "!README.md",
+    "!CHANGELOG.md",
+    "!LICENSE"
+]
+
+[[bin]]
+name = "realm"
+path = "src/main.rs"
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
