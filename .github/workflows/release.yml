@@ -1,0 +1,133 @@
+name: Release
+
+# Grant GITHUB_TOKEN permission to create tags & releases
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'VERSION'
+      - '.github/workflows/release.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-release:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: realm
+            asset_name: realm-linux-x64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: realm
+            asset_name: realm-linux-arm64
+            use_cross: true
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact_name: realm
+            asset_name: realm-darwin-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: realm
+            asset_name: realm-darwin-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: realm.exe
+            asset_name: realm-windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: get_version
+        run: |
+          version=$(<VERSION)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use_cross == true
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build (cargo)
+        if: matrix.use_cross != true
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build (cross)
+        if: matrix.use_cross == true
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Create build directory
+        run: |
+          mkdir -p build
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} build/
+          else
+            cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} build/
+            chmod +x build/${{ matrix.artifact_name }}
+          fi
+        shell: bash
+
+      - name: Package artifact
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            7z a -tzip ${{ matrix.asset_name }}-${{ steps.get_version.outputs.version }}.zip ./build/${{ matrix.artifact_name }}
+          else
+            tar -czvf ${{ matrix.asset_name }}-${{ steps.get_version.outputs.version }}.tar.gz -C build ${{ matrix.artifact_name }}
+          fi
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: |
+            ${{ matrix.asset_name }}-${{ steps.get_version.outputs.version }}.tar.gz
+            ${{ matrix.asset_name }}-${{ steps.get_version.outputs.version }}.zip
+
+  release:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: get_version
+        run: |
+          version=$(<VERSION)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: ls -R artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: v${{ steps.get_version.outputs.version }}
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+            install.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
