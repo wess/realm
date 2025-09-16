@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use dirs::home_dir;
 use flate2::read::GzDecoder;
+use reqwest::Client;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -10,6 +11,7 @@ use super::types::Runtime;
 
 pub struct RuntimeManager {
   realm_dir: PathBuf,
+  http_client: Client,
 }
 
 impl RuntimeManager {
@@ -21,7 +23,18 @@ impl RuntimeManager {
       fs::create_dir_all(&realm_dir).context("Failed to create .realm directory")?;
     }
 
-    Ok(Self { realm_dir })
+    let user_agent: &str = concat!(
+      env!("CARGO_PKG_NAME"),
+      "/",
+      env!("CARGO_PKG_VERSION"),
+    );
+
+    let http_client = Client::builder()
+      .user_agent(user_agent)
+      .build()
+      .context("Failed to initialize HTTP client")?;
+
+    Ok(Self { realm_dir, http_client })
   }
 
   pub fn get_runtime_versions_dir(&self, runtime: &Runtime) -> PathBuf {
@@ -82,7 +95,7 @@ impl RuntimeManager {
       "https://github.com/oven-sh/bun/releases/download/bun-v{actual_version}/bun-{os}-{arch}.zip"
     );
 
-    let response = reqwest::get(&download_url)
+    let response = self.http_client.get(&download_url).send()
       .await
       .context("Failed to download Bun")?;
 
@@ -176,7 +189,7 @@ impl RuntimeManager {
       "https://nodejs.org/dist/v{actual_version}/node-v{actual_version}-{os}-{arch}.tar.gz"
     );
 
-    let response = reqwest::get(&download_url)
+    let response = self.http_client.get(&download_url).send()
       .await
       .context("Failed to download Node.js")?;
 
@@ -240,7 +253,7 @@ impl RuntimeManager {
   }
 
   async fn get_latest_bun_version(&self) -> Result<String> {
-    let response = reqwest::get("https://api.github.com/repos/oven-sh/bun/releases/latest")
+    let response = self.http_client.get("https://api.github.com/repos/oven-sh/bun/releases/latest").send()
       .await
       .context("Failed to fetch latest Bun version")?;
 
@@ -259,7 +272,7 @@ impl RuntimeManager {
   }
 
   async fn get_latest_node_version(&self) -> Result<String> {
-    let response = reqwest::get("https://nodejs.org/dist/index.json")
+    let response = self.http_client.get("https://nodejs.org/dist/index.json").send()
       .await
       .context("Failed to fetch Node.js versions")?;
 
