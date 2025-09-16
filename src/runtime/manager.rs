@@ -23,18 +23,17 @@ impl RuntimeManager {
       fs::create_dir_all(&realm_dir).context("Failed to create .realm directory")?;
     }
 
-    let user_agent: &str = concat!(
-      env!("CARGO_PKG_NAME"),
-      "/",
-      env!("CARGO_PKG_VERSION"),
-    );
+    let user_agent: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
     let http_client = Client::builder()
       .user_agent(user_agent)
       .build()
       .context("Failed to initialize HTTP client")?;
 
-    Ok(Self { realm_dir, http_client })
+    Ok(Self {
+      realm_dir,
+      http_client,
+    })
   }
 
   pub fn get_runtime_versions_dir(&self, runtime: &Runtime) -> PathBuf {
@@ -95,7 +94,10 @@ impl RuntimeManager {
       "https://github.com/oven-sh/bun/releases/download/bun-v{actual_version}/bun-{os}-{arch}.zip"
     );
 
-    let response = self.http_client.get(&download_url).send()
+    let response = self
+      .http_client
+      .get(&download_url)
+      .send()
       .await
       .context("Failed to download Bun")?;
 
@@ -189,7 +191,10 @@ impl RuntimeManager {
       "https://nodejs.org/dist/v{actual_version}/node-v{actual_version}-{os}-{arch}.tar.gz"
     );
 
-    let response = self.http_client.get(&download_url).send()
+    let response = self
+      .http_client
+      .get(&download_url)
+      .send()
       .await
       .context("Failed to download Node.js")?;
 
@@ -253,7 +258,10 @@ impl RuntimeManager {
   }
 
   async fn get_latest_bun_version(&self) -> Result<String> {
-    let response = self.http_client.get("https://api.github.com/repos/oven-sh/bun/releases/latest").send()
+    let response = self
+      .http_client
+      .get("https://api.github.com/repos/oven-sh/bun/releases/latest")
+      .send()
       .await
       .context("Failed to fetch latest Bun version")?;
 
@@ -272,7 +280,10 @@ impl RuntimeManager {
   }
 
   async fn get_latest_node_version(&self) -> Result<String> {
-    let response = self.http_client.get("https://nodejs.org/dist/index.json").send()
+    let response = self
+      .http_client
+      .get("https://nodejs.org/dist/index.json")
+      .send()
       .await
       .context("Failed to fetch Node.js versions")?;
 
