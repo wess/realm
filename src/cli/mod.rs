@@ -111,7 +111,7 @@ impl CliHandler {
 
     // Install runtime if needed
     if !self.runtime_manager.is_version_installed(&runtime) {
-      println!("📦 Installing {} {}...", runtime.name(), runtime.version());
+      println!("📦 Getting {} {}...", runtime.name(), runtime.version());
       self.runtime_manager.install_version(&runtime).await?;
     }
 
