@@ -1,5 +1,6 @@
 use crate::config::{ProcessConfig, RealmConfig};
 use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -249,7 +250,10 @@ CMD ["echo", "Use docker-compose to start services"]
   fn generate_dockerfile_copy_commands(&self) -> String {
     let mut commands = String::new();
 
-    for name in self.config.processes.keys() {
+    let mut process_names: Vec<_> = self.config.processes.keys().cloned().collect();
+    process_names.sort();
+
+    for name in process_names {
       commands.push_str(&format!("COPY ./{name} /app/{name}\n"));
     }
 
@@ -260,12 +264,17 @@ CMD ["echo", "Use docker-compose to start services"]
     let mut services = String::new();
 
     // Generate service for each process
-    for (name, config) in &self.config.processes {
+    let mut process_entries: Vec<_> = self.config.processes.iter().collect();
+    process_entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+    for (name, config) in process_entries {
       let port = config.port.unwrap_or(3000);
       let working_dir = config
         .working_directory
         .clone()
         .unwrap_or_else(|| name.clone());
+
+      let env_block = Self::build_environment_block(&self.config.env);
 
       services.push_str(&format!(
         r#"  {}:
@@ -274,18 +283,11 @@ CMD ["echo", "Use docker-compose to start services"]
     command: {}
     ports:
       - "{}:{}"
-    environment:
-{}
-    networks:
+{}    networks:
       - realm-network
 
 "#,
-        name,
-        working_dir,
-        config.command,
-        port,
-        port,
-        self.generate_env_vars()
+        name, working_dir, config.command, port, port, env_block
       ));
     }
 
@@ -327,21 +329,28 @@ networks:
     Ok(())
   }
 
-  fn generate_env_vars(&self) -> String {
-    let mut env_vars = String::new();
-
-    for (key, value) in &self.config.env {
-      env_vars.push_str(&format!("      - {key}={value}\n"));
+  fn build_environment_block(env: &HashMap<String, String>) -> String {
+    if env.is_empty() {
+      return String::new();
     }
 
-    env_vars
+    let mut pairs: Vec<_> = env.iter().collect();
+    pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+    let mut block = String::from("    environment:\n");
+    for (key, value) in pairs {
+      block.push_str(&format!("      - {}={}\n", key, value));
+    }
+
+    block
   }
 
   fn generate_nginx_depends_on(&self) -> String {
-    self
-      .config
-      .processes
-      .keys()
+    let mut process_names: Vec<_> = self.config.processes.keys().cloned().collect();
+    process_names.sort();
+
+    process_names
+      .into_iter()
       .map(|name| format!("      - {name}"))
       .collect::<Vec<_>>()
       .join("\n")
@@ -530,5 +539,28 @@ Your application includes the following services:
       })
       .collect::<Vec<_>>()
       .join("\n")
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn environment_block_empty_when_no_vars() {
+    let env = HashMap::new();
+    let rendered = Bundler::build_environment_block(&env);
+    assert!(rendered.is_empty());
+  }
+
+  #[test]
+  fn environment_block_sorts_keys() {
+    let mut env = HashMap::new();
+    env.insert("B_KEY".to_string(), "two".to_string());
+    env.insert("A_KEY".to_string(), "one".to_string());
+
+    let rendered = Bundler::build_environment_block(&env);
+    let expected = "    environment:\n      - A_KEY=one\n      - B_KEY=two\n";
+    assert_eq!(rendered, expected);
   }
 }

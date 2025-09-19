@@ -7,20 +7,27 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
-use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
+
+#[derive(Clone, Debug)]
+struct RouteEntry {
+  pattern: String,
+  process: String,
+  port: u16,
+}
 
 pub struct ProxyServer {
   config: RealmConfig,
   process_manager: ProcessManager,
-  route_map: HashMap<String, (String, u16)>, // route -> (process_name, port)
+  route_map: Arc<Vec<RouteEntry>>,
 }
 
 impl ProxyServer {
   pub fn new(config: RealmConfig, process_manager: ProcessManager) -> Self {
-    let route_map = Self::build_route_map(&config);
+    let route_map = Arc::new(Self::build_route_map(&config));
 
     Self {
       config,
@@ -29,40 +36,33 @@ impl ProxyServer {
     }
   }
 
-  fn build_route_map(config: &RealmConfig) -> HashMap<String, (String, u16)> {
-    let mut route_map = HashMap::new();
+  fn build_route_map(config: &RealmConfig) -> Vec<RouteEntry> {
+    let mut routes = Vec::new();
 
     for (process_name, process_config) in &config.processes {
       let port = process_config.port.unwrap_or(3000);
 
       for route in &process_config.routes {
-        route_map.insert(route.clone(), (process_name.clone(), port));
+        routes.push(RouteEntry {
+          pattern: route.clone(),
+          process: process_name.clone(),
+          port,
+        });
       }
     }
 
-    // Sort routes by specificity (longer/more specific routes first)
-    let mut routes: Vec<_> = route_map.keys().cloned().collect();
     routes.sort_by(|a, b| {
-      // Exact matches come before wildcard matches
-      let a_wildcard = a.contains('*');
-      let b_wildcard = b.contains('*');
+      let a_wildcard = a.pattern.contains('*');
+      let b_wildcard = b.pattern.contains('*');
 
       match (a_wildcard, b_wildcard) {
         (false, true) => std::cmp::Ordering::Less,
         (true, false) => std::cmp::Ordering::Greater,
-        _ => b.len().cmp(&a.len()), // Longer routes first
+        _ => b.pattern.len().cmp(&a.pattern.len()),
       }
     });
 
-    // Rebuild map with sorted order
-    let mut sorted_map = HashMap::new();
-    for route in routes {
-      if let Some(value) = route_map.get(&route) {
-        sorted_map.insert(route, value.clone());
-      }
-    }
-
-    sorted_map
+    routes
   }
 
   pub async fn start(&self) -> Result<()> {
@@ -79,23 +79,29 @@ impl ProxyServer {
       self.config.proxy_port
     );
     println!("📋 Routes configured:");
-    for (route, (process, port)) in &self.route_map {
-      println!("   {route} → {process}:{port}");
+    for entry in self.route_map.iter() {
+      println!("   {} → {}:{}", entry.pattern, entry.process, entry.port);
     }
 
     loop {
       let (stream, _) = listener.accept().await?;
       let io = TokioIo::new(stream);
 
-      let route_map = self.route_map.clone();
+      let route_map = Arc::clone(&self.route_map);
       let process_manager = self.process_manager.clone();
 
       tokio::task::spawn(async move {
+        let route_map = Arc::clone(&route_map);
+        let process_manager = process_manager.clone();
+
         if let Err(err) = http1::Builder::new()
           .serve_connection(
             io,
             service_fn(move |req| {
-              Self::handle_request(req, route_map.clone(), process_manager.clone())
+              let route_map = Arc::clone(&route_map);
+              let process_manager = process_manager.clone();
+
+              async move { Self::handle_request(req, route_map, process_manager).await }
             }),
           )
           .await
@@ -108,7 +114,7 @@ impl ProxyServer {
 
   async fn handle_request(
     req: Request<Incoming>,
-    route_map: HashMap<String, (String, u16)>,
+    route_map: Arc<Vec<RouteEntry>>,
     _process_manager: ProcessManager,
   ) -> Result<Response<Full<Bytes>>, Infallible> {
     let path = req.uri().path();
@@ -125,7 +131,7 @@ impl ProxyServer {
     }
 
     // Find matching route
-    let target = Self::find_matching_route(path, &route_map);
+    let target = Self::find_matching_route(path, route_map.as_ref());
 
     match target {
       Some((process_name, port)) => Self::proxy_request(req, &process_name, port).await,
@@ -144,31 +150,28 @@ impl ProxyServer {
     }
   }
 
-  fn find_matching_route(
-    path: &str,
-    route_map: &HashMap<String, (String, u16)>,
-  ) -> Option<(String, u16)> {
-    // Try exact match first
-    if let Some((process, port)) = route_map.get(path) {
-      return Some((process.clone(), *port));
-    }
+  fn find_matching_route(path: &str, route_map: &[RouteEntry]) -> Option<(String, u16)> {
+    let mut wildcard_match: Option<(String, u16)> = None;
+    let mut default_route: Option<(String, u16)> = None;
 
-    // Try prefix matching for wildcard routes
-    for (route, (process, port)) in route_map {
-      if route.ends_with("*") {
-        let prefix = &route[..route.len() - 1];
-        if path.starts_with(prefix) {
-          return Some((process.clone(), *port));
+    for entry in route_map {
+      if !entry.pattern.contains('*') && entry.pattern == path {
+        return Some((entry.process.clone(), entry.port));
+      }
+
+      if entry.pattern == "/" && default_route.is_none() {
+        default_route = Some((entry.process.clone(), entry.port));
+      }
+
+      if entry.pattern.ends_with('*') {
+        let prefix = entry.pattern.trim_end_matches('*');
+        if path.starts_with(prefix) && wildcard_match.is_none() {
+          wildcard_match = Some((entry.process.clone(), entry.port));
         }
       }
     }
 
-    // Default to root route if exists
-    if let Some((process, port)) = route_map.get("/") {
-      return Some((process.clone(), *port));
-    }
-
-    None
+    wildcard_match.or(default_route)
   }
 
   async fn proxy_request(
@@ -300,5 +303,91 @@ impl ProxyServer {
                     .unwrap())
       }
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::config::ProcessConfig;
+  use std::collections::HashMap;
+
+  fn build_config(routes: &[(&str, &str, u16, Vec<&str>)]) -> RealmConfig {
+    let mut processes = HashMap::new();
+
+    for (name, command, port, route_patterns) in routes {
+      processes.insert(
+        name.to_string(),
+        ProcessConfig {
+          command: command.to_string(),
+          port: Some(*port),
+          routes: route_patterns.iter().map(|r| r.to_string()).collect(),
+          working_directory: None,
+        },
+      );
+    }
+
+    RealmConfig {
+      env: HashMap::new(),
+      env_file: None,
+      processes,
+      proxy_port: 8000,
+    }
+  }
+
+  #[test]
+  fn chooses_exact_route_over_wildcard() {
+    let config = build_config(&[
+      ("api_specific", "cmd", 4001, vec!["/api/users"]),
+      ("api_wildcard", "cmd", 4002, vec!["/api/*"]),
+    ]);
+
+    let routes = ProxyServer::build_route_map(&config);
+    let matched = ProxyServer::find_matching_route("/api/users", &routes).unwrap();
+
+    assert_eq!(matched.0, "api_specific");
+    assert_eq!(matched.1, 4001);
+  }
+
+  #[test]
+  fn chooses_most_specific_wildcard() {
+    let config = build_config(&[
+      ("api_generic", "cmd", 5000, vec!["/api/*"]),
+      ("api_users", "cmd", 5001, vec!["/api/users/*"]),
+    ]);
+
+    let routes = ProxyServer::build_route_map(&config);
+    let matched = ProxyServer::find_matching_route("/api/users/42", &routes).unwrap();
+
+    assert_eq!(matched.0, "api_users");
+    assert_eq!(matched.1, 5001);
+  }
+
+  #[test]
+  fn falls_back_to_root_route() {
+    let config = build_config(&[("frontend", "cmd", 3000, vec!["/"])]);
+
+    let routes = ProxyServer::build_route_map(&config);
+    let matched = ProxyServer::find_matching_route("/unknown", &routes).unwrap();
+
+    assert_eq!(matched.0, "frontend");
+    assert_eq!(matched.1, 3000);
+  }
+
+  #[test]
+  fn returns_none_when_no_routes_match() {
+    let mut config = build_config(&[]);
+    config.processes.insert(
+      "api".to_string(),
+      ProcessConfig {
+        command: "cmd".to_string(),
+        port: Some(4000),
+        routes: vec!["/api".to_string()],
+        working_directory: None,
+      },
+    );
+
+    let routes = ProxyServer::build_route_map(&config);
+    assert!(ProxyServer::find_matching_route("/other", &routes).is_none());
   }
 }

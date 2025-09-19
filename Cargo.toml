@@ -1,6 +1,6 @@
 [package]
 name = "realmenv"
-version = "0.1.0"
+version = "0.1.5"
 edition = "2021"
 rust-version = "1.75"
 description = "Zero-config development environment with isolated runtimes, process management, and intelligent HTTP proxy"
@@ -22,6 +22,10 @@ exclude = [
     "!CHANGELOG.md",
     "!LICENSE"
 ]
+
+[lib]
+name = "realm"
+path = "src/lib.rs"
 
 [[bin]]
 name = "realm"
