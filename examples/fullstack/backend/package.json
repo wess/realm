@@ -1,0 +1,6 @@
+{
+  "name": "backend",
+  "scripts": {
+    "server": "bun server.js"
+  }
+}

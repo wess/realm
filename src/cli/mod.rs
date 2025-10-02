@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use crate::errors::{RealmError, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -144,8 +144,8 @@ impl CliHandler {
   async fn handle_start(&self) -> Result<()> {
     // Check if we're in an activated realm environment
     if std::env::var("REALM_ENV").is_err() {
-      return Err(anyhow!(
-        "Not in an activated realm environment. Run 'source .venv/bin/activate' first."
+      return Err(RealmError::ValidationError(
+        "Not in an activated realm environment. Run 'source .venv/bin/activate' first.".to_string()
       ));
     }
 

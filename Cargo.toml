@@ -9,7 +9,7 @@ license = "MIT"
 readme = "README.md"
 homepage = "https://github.com/wess/realm"
 repository = "https://github.com/wess/realm"
-documentation = "https://docs.rs/realm"
+documentation = "https://github.com/wess/realm#readme"
 keywords = ["development", "environment", "proxy", "process-manager", "cli"]
 categories = ["command-line-utilities", "development-tools", "web-programming"]
 exclude = [
@@ -46,6 +46,8 @@ dirs = "5.0"
 flate2 = "1.0"
 tar = "0.4"
 dotenv = "0.15"
+url = "2.4"
+bytes = "1.5"
 
 [dev-dependencies]
 tempfile = "3.8"

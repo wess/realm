@@ -999,6 +999,7 @@ name = "realmenv"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "bytes",
  "clap",
  "dirs",
  "dotenv",
@@ -1014,6 +1015,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-test",
+ "url",
 ]
 
 [[package]]

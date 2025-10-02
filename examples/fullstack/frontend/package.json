@@ -1,0 +1,6 @@
+{
+  "name": "frontend",
+  "scripts": {
+    "dev": "bun --hot server.js"
+  }
+}

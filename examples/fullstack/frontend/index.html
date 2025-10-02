@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Realm Fullstack Example</title>
+</head>
+<body>
+  <h1>Realm Fullstack Example 🏰</h1>
+  <button id="fetch-btn">Fetch from API</button>
+  <pre id="result"></pre>
+  
+  <script type="module">
+    document.getElementById('fetch-btn').addEventListener('click', async () => {
+      const res = await fetch('/api/hello');
+      const data = await res.json();
+      document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+    });
+  </script>
+</body>
+</html>
