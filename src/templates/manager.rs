@@ -1,4 +1,4 @@
-use super::builtin::{nextjs, react, svelte, vue};
+use super::builtin::{fastapi, nextjs, react, svelte, vue};
 use super::template::{Template, TemplateFile};
 use crate::config::RealmConfig;
 use anyhow::{anyhow, Context, Result};
@@ -209,6 +209,7 @@ impl TemplateManager {
     svelte::create_template(&self.templates_dir)?;
     vue::create_template(&self.templates_dir)?;
     nextjs::create_template(&self.templates_dir)?;
+    fastapi::create_template(&self.templates_dir)?;
     Ok(())
   }
 }

@@ -193,6 +193,11 @@ impl RuntimeManager {
         .join(version)
         .join("bin")
         .join("node"),
+      Runtime::Python(version) => self
+        .get_runtime_versions_dir(runtime)
+        .join(version)
+        .join("bin")
+        .join("python3"),
     }
   }
 
@@ -208,6 +213,7 @@ impl RuntimeManager {
     match runtime {
       Runtime::Bun(version) => self.install_bun_version(version).await,
       Runtime::Node(version) => self.install_node_version(version).await,
+      Runtime::Python(version) => self.install_python_version(version).await,
     }
   }
 
@@ -515,6 +521,164 @@ impl RuntimeManager {
     )))
   }
 
+  async fn install_python_version(&self, version: &str) -> Result<()> {
+    println!("Installing Python {version}");
+
+    let actual_version = if version == "latest" {
+      self.get_latest_python_version().await?
+    } else {
+      version.to_string()
+    };
+
+    let (os, arch) = get_platform_info()?;
+
+    let arch_name = match arch.as_str() {
+      "x64" => "x86_64",
+      "arm64" => "aarch64",
+      _ => arch.as_str(),
+    };
+
+    // Use python-build-standalone builds for reliable cross-platform support
+    let download_url = format!(
+      "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-{actual_version}+20241016-{arch_name}-unknown-{}-install_only.tar.gz",
+      if os == "darwin" { "apple-darwin" } else { "linux-gnu" }
+    );
+
+    validate_download_url(&download_url, &self.config.allowed_hosts)?;
+
+    let version_dir = self
+      .get_runtime_versions_dir(&Runtime::Python(actual_version.clone()))
+      .join(&actual_version);
+
+    // Attempt download with retries
+    const MAX_RETRIES: u32 = 3;
+    let mut last_error = None;
+
+    for attempt in 1..=MAX_RETRIES {
+      if attempt > 1 {
+        println!("Retry {}/{MAX_RETRIES}...", attempt - 1);
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+      }
+
+      match self.download_and_install_python(&download_url, &version_dir, &actual_version).await {
+        Ok(_) => {
+          println!("Python {actual_version} installed successfully");
+          return Ok(());
+        }
+        Err(e) => {
+          last_error = Some(e);
+          let _ = fs::remove_dir_all(&version_dir);
+        }
+      }
+    }
+
+    Err(last_error.unwrap_or_else(|| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(
+        "Unknown error during installation".to_string()
+      ))
+    }))
+  }
+
+  async fn download_and_install_python(&self, download_url: &str, version_dir: &Path, _actual_version: &str) -> Result<()> {
+    let response = self
+      .config.http_client
+      .get(download_url)
+      .send()
+      .await
+      .map_err(|e| {
+        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+          "Network error: {e}. Check your internet connection and try again."
+        )))
+      })?;
+
+    if !response.status().is_success() {
+      return Err(RealmError::RuntimeError(RuntimeError::DownloadFailed(
+        format!("HTTP {} - The requested Python version may not exist. Visit https://github.com/indygreg/python-build-standalone/releases to see available versions.", response.status()),
+      )));
+    }
+
+    let bytes = response.bytes().await.map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+        "Failed to download file: {e}. The connection may have been interrupted."
+      )))
+    })?;
+
+    fs::create_dir_all(version_dir).map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::InstallationFailed(format!(
+        "Failed to create directory {}: {e}. Check disk space and permissions.",
+        version_dir.display()
+      )))
+    })?;
+
+    // Extract tar.gz
+    let tar_gz = std::io::Cursor::new(bytes);
+    let tar = GzDecoder::new(tar_gz);
+    let mut archive = Archive::new(tar);
+
+    // Python build standalone extracts to python/ subdirectory
+    let temp_extract = version_dir.parent().unwrap().join(format!("temp_{}", version_dir.file_name().unwrap().to_string_lossy()));
+    fs::create_dir_all(&temp_extract).map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::InstallationFailed(format!(
+        "Failed to create temp directory: {e}"
+      )))
+    })?;
+
+    archive
+      .unpack(&temp_extract)
+      .map_err(|e| {
+        RealmError::RuntimeError(RuntimeError::ExtractionFailed(format!(
+          "Failed to extract archive: {e}. The download may be corrupted."
+        )))
+      })?;
+
+    // Move python/ contents to version_dir
+    let python_dir = temp_extract.join("python");
+    if python_dir.exists() {
+      for entry in fs::read_dir(&python_dir).map_err(|e| {
+        RealmError::RuntimeError(RuntimeError::InstallationFailed(format!(
+          "Failed to read directory: {e}"
+        )))
+      })? {
+        let entry = entry.map_err(|e| {
+          RealmError::RuntimeError(RuntimeError::InstallationFailed(format!(
+            "Failed to read directory entry: {e}"
+          )))
+        })?;
+        let src = entry.path();
+        let dst = version_dir.join(entry.file_name());
+        if src.is_dir() {
+          copy_dir(&src, &dst)?;
+        } else {
+          fs::copy(&src, &dst).map_err(|e| {
+            RealmError::RuntimeError(RuntimeError::InstallationFailed(format!(
+              "Failed to copy file: {e}"
+            )))
+          })?;
+        }
+      }
+    } else {
+      cleanup_temp_directories(&[temp_extract]);
+      return Err(RealmError::RuntimeError(RuntimeError::ExtractionFailed(
+        "Expected python/ directory not found in archive. The download may be corrupted.".to_string()
+      )));
+    }
+
+    cleanup_temp_directories(&[temp_extract]);
+
+    // Ensure python3 is executable
+    let python_bin = version_dir.join("bin").join("python3");
+    if python_bin.exists() {
+      set_executable_permissions(&python_bin)?;
+    }
+
+    Ok(())
+  }
+
+  async fn get_latest_python_version(&self) -> Result<String> {
+    // Return stable latest version - python-build-standalone typically has 3.12.x as latest stable
+    Ok("3.12.7".to_string())
+  }
+
   pub fn get_npm_path(&self, runtime: &Runtime) -> Option<PathBuf> {
     match runtime {
       Runtime::Node(version) => {
@@ -530,6 +694,25 @@ impl RuntimeManager {
         }
       }
       Runtime::Bun(_) => None, // Bun doesn't use npm
+      Runtime::Python(_) => None, // Python uses pip
+    }
+  }
+
+  pub fn get_pip_path(&self, runtime: &Runtime) -> Option<PathBuf> {
+    match runtime {
+      Runtime::Python(version) => {
+        let pip_path = self
+          .get_runtime_versions_dir(runtime)
+          .join(version)
+          .join("bin")
+          .join("pip3");
+        if pip_path.exists() {
+          Some(pip_path)
+        } else {
+          None
+        }
+      }
+      _ => None,
     }
   }
 

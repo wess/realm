@@ -1,4 +1,6 @@
 use crate::config::RealmConfig;
+use crate::runtime::types::Runtime;
+use crate::runtime::manager::RuntimeManager;
 use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -92,6 +94,46 @@ impl RealmEnvironment {
   }
 
   fn generate_activation_script(&self) -> Result<()> {
+    // Check if this is a Python environment (has pyvenv.cfg)
+    let is_python_env = self.path.join("pyvenv.cfg").exists();
+
+    let python_section = if is_python_env {
+      format!(
+        r#"
+# Python virtual environment support
+VIRTUAL_ENV="{}"
+export VIRTUAL_ENV
+
+if [ -n "${{_OLD_PYTHONHOME:-}}" ] ; then
+    PYTHONHOME="${{_OLD_REALM_PYTHONHOME:-}}"
+    export PYTHONHOME
+    unset _OLD_REALM_PYTHONHOME
+else
+    unset PYTHONHOME
+fi
+"#,
+        self.path.display()
+      )
+    } else {
+      String::new()
+    };
+
+    let python_deactivate = if is_python_env {
+      r#"
+    if [ -n "${VIRTUAL_ENV:-}" ] ; then
+        unset VIRTUAL_ENV
+    fi
+
+    if [ -n "${_OLD_REALM_PYTHONHOME:-}" ] ; then
+        PYTHONHOME="${_OLD_REALM_PYTHONHOME:-}"
+        export PYTHONHOME
+        unset _OLD_REALM_PYTHONHOME
+    fi
+"#
+    } else {
+      ""
+    };
+
     let activate_script = format!(
       r#"#!/bin/bash
 # This file must be used with "source bin/activate" *from bash*
@@ -115,7 +157,7 @@ deactivate () {{
         export PS1
         unset _OLD_REALM_PS1
     fi
-
+{}
     unset REALM_ENV
     if [ ! "${{1:-}}" = "nondestructive" ] ; then
         unset -f deactivate
@@ -131,7 +173,7 @@ export REALM_ENV
 _OLD_REALM_PATH="$PATH"
 PATH="{}:$PATH"
 export PATH
-
+{}
 if [ -z "${{REALM_DISABLE_PROMPT:-}}" ] ; then
     _OLD_REALM_PS1="${{PS1:-}}"
     PS1="(realm) ${{PS1:-}}"
@@ -146,8 +188,10 @@ echo "Run 'realm start' to start your processes"
 echo "Run 'realm proxy' to start the development proxy"
 echo "Run 'deactivate' to exit the realm environment"
 "#,
+      python_deactivate,
       self.path.display(),
-      self.path.join("bin").display()
+      self.path.join("bin").display(),
+      python_section
     );
 
     let activate_path = self.path.join("bin").join("activate");
@@ -175,5 +219,113 @@ echo "Run 'deactivate' to exit the realm environment"
 
   pub fn get_config_path(&self) -> PathBuf {
     self.path.join("config")
+  }
+
+  pub fn setup_python_isolation(&self, runtime: &Runtime, runtime_manager: &RuntimeManager) -> Result<()> {
+    match runtime {
+      Runtime::Python(version) => {
+        let python_version_parts: Vec<&str> = version.split('.').collect();
+        let python_minor_version = if python_version_parts.len() >= 2 {
+          format!("{}.{}", python_version_parts[0], python_version_parts[1])
+        } else {
+          "3.12".to_string()
+        };
+
+        // Create per-project site-packages directory
+        let site_packages_dir = self.path
+          .join("lib")
+          .join(format!("python{}", python_minor_version))
+          .join("site-packages");
+        fs::create_dir_all(&site_packages_dir)
+          .context("Failed to create site-packages directory")?;
+
+        // Create symlink to shared Python binary
+        let shared_python = runtime_manager.get_runtime_path(runtime);
+        let local_python = self.path.join("bin").join("python");
+        let local_python3 = self.path.join("bin").join("python3");
+
+        #[cfg(unix)]
+        {
+          use std::os::unix::fs::symlink;
+          if !local_python3.exists() {
+            symlink(&shared_python, &local_python3)
+              .context("Failed to create python3 symlink")?;
+          }
+          if !local_python.exists() {
+            symlink(&shared_python, &local_python)
+              .context("Failed to create python symlink")?;
+          }
+        }
+
+        #[cfg(windows)]
+        {
+          use std::os::windows::fs::symlink_file;
+          if !local_python3.exists() {
+            symlink_file(&shared_python, local_python3.with_extension("exe"))
+              .context("Failed to create python3 symlink")?;
+          }
+          if !local_python.exists() {
+            symlink_file(&shared_python, local_python.with_extension("exe"))
+              .context("Failed to create python symlink")?;
+          }
+        }
+
+        // Create pyvenv.cfg pointing to shared Python
+        let pyvenv_cfg = format!(
+          "home = {}\ninclude-system-site-packages = false\nversion = {}\n",
+          runtime_manager
+            .get_runtime_versions_dir(runtime)
+            .join(version)
+            .display(),
+          version
+        );
+
+        fs::write(self.path.join("pyvenv.cfg"), pyvenv_cfg)
+          .context("Failed to write pyvenv.cfg")?;
+
+        // Create symlink to pip if it exists
+        if let Some(pip_path) = runtime_manager.get_pip_path(runtime) {
+          let local_pip = self.path.join("bin").join("pip");
+          let local_pip3 = self.path.join("bin").join("pip3");
+
+          #[cfg(unix)]
+          {
+            use std::os::unix::fs::symlink;
+            if !local_pip3.exists() {
+              symlink(&pip_path, &local_pip3)
+                .context("Failed to create pip3 symlink")?;
+            }
+            if !local_pip.exists() {
+              symlink(&pip_path, &local_pip)
+                .context("Failed to create pip symlink")?;
+            }
+          }
+
+          #[cfg(windows)]
+          {
+            use std::os::windows::fs::symlink_file;
+            if !local_pip3.exists() {
+              symlink_file(&pip_path, local_pip3.with_extension("exe"))
+                .context("Failed to create pip3 symlink")?;
+            }
+            if !local_pip.exists() {
+              symlink_file(&pip_path, local_pip.with_extension("exe"))
+                .context("Failed to create pip symlink")?;
+            }
+          }
+        }
+
+        println!("✨ Created per-project Python environment with isolated site-packages");
+
+        // Regenerate activation script to include VIRTUAL_ENV
+        self.generate_activation_script()?;
+      }
+      _ => {}
+    }
+    Ok(())
+  }
+
+  pub fn regenerate_activation_script(&self) -> Result<()> {
+    self.generate_activation_script()
   }
 }

@@ -126,7 +126,10 @@ impl CliHandler {
     }
 
     // Initialize realm environment
-    let _realm_env = RealmEnvironment::init(&path)?;
+    let realm_env = RealmEnvironment::init(&path)?;
+
+    // Set up Python-specific isolation if using Python runtime
+    realm_env.setup_python_isolation(&runtime, &self.runtime_manager)?;
 
     println!("✅ Realm environment initialized!");
     println!("🎯 Runtime: {} {}", runtime.name(), runtime.version());

@@ -28,9 +28,23 @@ fn test_runtime_parse_node() {
 
 #[test]
 fn test_runtime_parse_invalid() {
-  assert!(Runtime::parse("python").is_err());
   assert!(Runtime::parse("invalid@1.0").is_err());
   assert!(Runtime::parse("").is_err());
+}
+
+#[test]
+fn test_runtime_parse_python() {
+  let runtime = Runtime::parse("python").unwrap();
+  assert_eq!(runtime.name(), "python");
+  assert_eq!(runtime.version(), "latest");
+
+  let runtime = Runtime::parse("python@3.12").unwrap();
+  assert_eq!(runtime.name(), "python");
+  assert_eq!(runtime.version(), "3.12");
+
+  let runtime = Runtime::parse("py@3.11.5").unwrap();
+  assert_eq!(runtime.name(), "python");
+  assert_eq!(runtime.version(), "3.11.5");
 }
 
 #[test]

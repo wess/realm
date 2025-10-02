@@ -11,7 +11,7 @@ Realm eliminates the complexity of modern full-stack development by providing:
 
 - **Virtualenv-like environments** for complete project isolation
 - **Built-in process manager** (like Foreman) with intelligent routing
-- **Multi-runtime support** (Bun, Node.js) with automatic version management  
+- **Multi-runtime support** (Bun, Node.js, Python) with automatic version management
 - **Zero-config proxy server** that routes requests to your services
 - **Project templates** to eliminate boilerplate
 - **One-command deployment** with Docker generation
@@ -50,14 +50,31 @@ This will download and install realm to `/usr/local/bin`.
 
 ## Quick Start
 
+### JavaScript Stack (Bun/Node)
 ```bash
-
 # Create a new full-stack project
 realm init myapp --template=react-express --runtime=bun
 
-# Activate the environment  
+# Activate the environment
 cd myapp
 source .venv/bin/activate
+
+# Start everything (processes + proxy)
+realm start
+# Visit http://localhost:8000 - it just works!
+```
+
+### Python Stack (FastAPI)
+```bash
+# Create a FastAPI + React project
+realm init myapp --template=react-fastapi --runtime=python@3.12
+
+# Activate the environment
+cd myapp
+source .venv/bin/activate
+
+# Install Python dependencies
+pip install -r backend/requirements.txt
 
 # Start everything (processes + proxy)
 realm start
@@ -130,10 +147,11 @@ processes:
 Realm includes built-in templates for common stacks:
 
 ### Available Templates
-- **`react-express`** - React frontend + Express backend
-- **`svelte-fastify`** - SvelteKit + Fastify backend  
-- **`vue-express`** - Vue 3 + Express backend
-- **`nextjs`** - Next.js 14 full-stack app
+- **`react-express`** - React frontend + Express backend (Bun/Node)
+- **`react-fastapi`** - React frontend + FastAPI backend (Python)
+- **`svelte-fastify`** - SvelteKit + Fastify backend (Bun/Node)
+- **`vue-express`** - Vue 3 + Express backend (Bun/Node)
+- **`nextjs`** - Next.js 14 full-stack app (Bun/Node)
 
 ### Using Templates
 ```bash
@@ -158,9 +176,19 @@ realm init .venv
 # Use specific Node.js version
 realm init .venv --runtime=node@20
 
-# Use specific Bun version  
+# Use specific Bun version
 realm init .venv --runtime=bun@1.0.0
+
+# Use Python with per-project isolation
+realm init .venv --runtime=python@3.12
 ```
+
+**Python Support:**
+- Downloads and manages Python from python-build-standalone
+- Creates per-project `site-packages` for complete isolation
+- Automatically sets `VIRTUAL_ENV` for compatibility with pip, poetry, etc.
+- Symlinks Python binary from shared installation
+- Works seamlessly with existing Python tooling
 
 Runtimes are isolated per realm environment - no global pollution!
 

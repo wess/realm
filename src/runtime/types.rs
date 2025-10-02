@@ -2,8 +2,9 @@ use anyhow::{anyhow, Result};
 
 #[derive(Debug, Clone)]
 pub enum Runtime {
-  Bun(String),  // version
-  Node(String), // version
+  Bun(String),    // version
+  Node(String),   // version
+  Python(String), // version
 }
 
 impl Runtime {
@@ -30,9 +31,20 @@ impl Runtime {
         "latest".to_string()
       };
       Ok(Runtime::Node(version))
+    } else if runtime_spec.starts_with("python") || runtime_spec.starts_with("py") {
+      let version = if runtime_spec.contains('@') {
+        runtime_spec
+          .split('@')
+          .nth(1)
+          .unwrap_or("latest")
+          .to_string()
+      } else {
+        "latest".to_string()
+      };
+      Ok(Runtime::Python(version))
     } else {
       Err(anyhow!(
-        "Unknown runtime: {}. Supported: bun, node",
+        "Unknown runtime: {}. Supported: bun, node, python",
         runtime_spec
       ))
     }
@@ -42,12 +54,13 @@ impl Runtime {
     match self {
       Runtime::Bun(_) => "bun",
       Runtime::Node(_) => "node",
+      Runtime::Python(_) => "python",
     }
   }
 
   pub fn version(&self) -> &str {
     match self {
-      Runtime::Bun(v) | Runtime::Node(v) => v,
+      Runtime::Bun(v) | Runtime::Node(v) | Runtime::Python(v) => v,
     }
   }
 }
