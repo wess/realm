@@ -63,6 +63,15 @@ impl Runtime {
       Runtime::Bun(v) | Runtime::Node(v) | Runtime::Python(v) => v,
     }
   }
+
+  pub fn from_name_version(name: &str, version: &str) -> Self {
+    match name {
+      "bun" => Runtime::Bun(version.to_string()),
+      "node" => Runtime::Node(version.to_string()),
+      "python" => Runtime::Python(version.to_string()),
+      _ => Runtime::Bun("latest".to_string()),
+    }
+  }
 }
 
 impl Default for Runtime {

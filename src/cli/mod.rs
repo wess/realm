@@ -61,6 +61,13 @@ pub enum Commands {
     #[command(subcommand)]
     command: TemplateCommands,
   },
+
+  /// List available runtime versions
+  List {
+    /// Runtime to list versions for (bun, node, python)
+    #[arg(long)]
+    runtime: String,
+  },
 }
 
 #[derive(Subcommand)]
@@ -95,6 +102,7 @@ impl CliHandler {
       Commands::Bundle => self.handle_bundle().await,
       Commands::Create { template } => self.handle_create_template(template).await,
       Commands::Templates { command } => self.handle_templates(command).await,
+      Commands::List { runtime } => self.handle_list(runtime).await,
     }
   }
 
@@ -258,6 +266,30 @@ impl CliHandler {
         Ok(())
       }
     }
+  }
+
+  async fn handle_list(&self, runtime_spec: String) -> Result<()> {
+    let runtime = Runtime::parse(&runtime_spec)?;
+
+    println!("📦 Fetching available {} versions...", runtime.name());
+
+    let versions = self.runtime_manager.list_available_versions(&runtime).await?;
+
+    if versions.is_empty() {
+      println!("   No versions found");
+    } else {
+      println!("\n   Available versions:");
+      for version in versions {
+        let installed_marker = if self.runtime_manager.is_version_installed(&Runtime::from_name_version(runtime.name(), &version)) {
+          " (installed)"
+        } else {
+          ""
+        };
+        println!("   • {}{}", version, installed_marker);
+      }
+    }
+
+    Ok(())
   }
 }
 

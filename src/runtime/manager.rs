@@ -539,9 +539,13 @@ impl RuntimeManager {
     };
 
     // Use python-build-standalone builds for reliable cross-platform support
+    // Using latest known stable release: 20241016
+    // Format: cpython-VERSION+RELEASE-ARCH-PLATFORM-install_only.tar.gz
+    let release_tag = "20241016";
+    let platform_suffix = if os == "darwin" { "apple-darwin" } else { "linux-gnu" };
+
     let download_url = format!(
-      "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-{actual_version}+20241016-{arch_name}-unknown-{}-install_only.tar.gz",
-      if os == "darwin" { "apple-darwin" } else { "linux-gnu" }
+      "https://github.com/indygreg/python-build-standalone/releases/download/{release_tag}/cpython-{actual_version}+{release_tag}-{arch_name}-unknown-{platform_suffix}-install_only.tar.gz"
     );
 
     validate_download_url(&download_url, &self.config.allowed_hosts)?;
@@ -593,7 +597,15 @@ impl RuntimeManager {
 
     if !response.status().is_success() {
       return Err(RealmError::RuntimeError(RuntimeError::DownloadFailed(
-        format!("HTTP {} - The requested Python version may not exist. Visit https://github.com/indygreg/python-build-standalone/releases to see available versions.", response.status()),
+        format!(
+          "HTTP {} - Python {} not found in python-build-standalone release.\n\
+           Tried URL: {}\n\
+           Supported versions: 3.8.x, 3.9.x, 3.10.x, 3.11.x, 3.12.x, 3.13.x\n\
+           Visit https://github.com/indygreg/python-build-standalone/releases/tag/20241016 for available builds.",
+          response.status(),
+          _actual_version,
+          download_url
+        ),
       )));
     }
 
@@ -675,8 +687,9 @@ impl RuntimeManager {
   }
 
   async fn get_latest_python_version(&self) -> Result<String> {
-    // Return stable latest version - python-build-standalone typically has 3.12.x as latest stable
-    Ok("3.12.7".to_string())
+    // Return stable version known to exist in python-build-standalone 20241016 release
+    // Supported versions: 3.8.x, 3.9.x, 3.10.x, 3.11.x, 3.12.x, 3.13.x
+    Ok("3.12.6".to_string())
   }
 
   pub fn get_npm_path(&self, runtime: &Runtime) -> Option<PathBuf> {
@@ -701,16 +714,23 @@ impl RuntimeManager {
   pub fn get_pip_path(&self, runtime: &Runtime) -> Option<PathBuf> {
     match runtime {
       Runtime::Python(version) => {
-        let pip_path = self
+        let bin_dir = self
           .get_runtime_versions_dir(runtime)
           .join(version)
-          .join("bin")
-          .join("pip3");
-        if pip_path.exists() {
-          Some(pip_path)
-        } else {
-          None
+          .join("bin");
+
+        // Try pip3 first, then pip
+        let pip3_path = bin_dir.join("pip3");
+        if pip3_path.exists() {
+          return Some(pip3_path);
         }
+
+        let pip_path = bin_dir.join("pip");
+        if pip_path.exists() {
+          return Some(pip_path);
+        }
+
+        None
       }
       _ => None,
     }
@@ -734,6 +754,158 @@ impl RuntimeManager {
           runtime.name()
         )))
       })
+  }
+
+  pub async fn list_available_versions(&self, runtime: &Runtime) -> Result<Vec<String>> {
+    match runtime {
+      Runtime::Python(_) => self.list_python_versions().await,
+      Runtime::Bun(_) => self.list_bun_versions().await,
+      Runtime::Node(_) => self.list_node_versions().await,
+    }
+  }
+
+  async fn list_python_versions(&self) -> Result<Vec<String>> {
+    let client = Client::builder()
+      .user_agent("realm")
+      .build()
+      .map_err(|e| {
+        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+          "Failed to create HTTP client: {e}"
+        )))
+      })?;
+
+    let release_tag = "20241016";
+    let url = format!(
+      "https://api.github.com/repos/indygreg/python-build-standalone/releases/tags/{}",
+      release_tag
+    );
+
+    let response = client.get(&url).send().await.map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+        "Failed to fetch Python versions: {e}"
+      )))
+    })?;
+
+    if !response.status().is_success() {
+      return Err(RealmError::RuntimeError(RuntimeError::DownloadFailed(
+        format!("Failed to fetch Python versions: HTTP {}", response.status()),
+      )));
+    }
+
+    let release: serde_json::Value = response.json().await.map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+        "Failed to parse Python versions: {e}"
+      )))
+    })?;
+
+    let mut versions = Vec::new();
+    if let Some(assets) = release.get("assets").and_then(|a| a.as_array()) {
+      for asset in assets {
+        if let Some(name) = asset.get("name").and_then(|n| n.as_str()) {
+          if name.starts_with("cpython-") && name.contains("install_only") {
+            if let Some(version_part) = name.strip_prefix("cpython-") {
+              if let Some(version) = version_part.split('+').next() {
+                if !versions.contains(&version.to_string()) {
+                  versions.push(version.to_string());
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    versions.sort_by(|a, b| {
+      let parse_version = |s: &str| -> Vec<u32> {
+        s.split('.')
+          .filter_map(|part| part.parse().ok())
+          .collect()
+      };
+      let a_parts = parse_version(a);
+      let b_parts = parse_version(b);
+      b_parts.cmp(&a_parts)
+    });
+
+    Ok(versions)
+  }
+
+  async fn list_bun_versions(&self) -> Result<Vec<String>> {
+    let client = Client::builder()
+      .user_agent("realm")
+      .build()
+      .map_err(|e| {
+        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+          "Failed to create HTTP client: {e}"
+        )))
+      })?;
+
+    let url = "https://api.github.com/repos/oven-sh/bun/releases";
+    let response = client.get(url).send().await.map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+        "Failed to fetch Bun versions: {e}"
+      )))
+    })?;
+
+    if !response.status().is_success() {
+      return Err(RealmError::RuntimeError(RuntimeError::DownloadFailed(
+        format!("Failed to fetch Bun versions: HTTP {}", response.status()),
+      )));
+    }
+
+    let releases: Vec<serde_json::Value> = response.json().await.map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+        "Failed to parse Bun versions: {e}"
+      )))
+    })?;
+
+    let mut versions = Vec::new();
+    for release in releases.iter().take(20) {
+      if let Some(tag) = release.get("tag_name").and_then(|t| t.as_str()) {
+        let version = tag.trim_start_matches("bun-v");
+        versions.push(version.to_string());
+      }
+    }
+
+    Ok(versions)
+  }
+
+  async fn list_node_versions(&self) -> Result<Vec<String>> {
+    let client = Client::builder()
+      .user_agent("realm")
+      .build()
+      .map_err(|e| {
+        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+          "Failed to create HTTP client: {e}"
+        )))
+      })?;
+
+    let url = "https://nodejs.org/dist/index.json";
+    let response = client.get(url).send().await.map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+        "Failed to fetch Node versions: {e}"
+      )))
+    })?;
+
+    if !response.status().is_success() {
+      return Err(RealmError::RuntimeError(RuntimeError::DownloadFailed(
+        format!("Failed to fetch Node versions: HTTP {}", response.status()),
+      )));
+    }
+
+    let releases: Vec<serde_json::Value> = response.json().await.map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+        "Failed to parse Node versions: {e}"
+      )))
+    })?;
+
+    let mut versions = Vec::new();
+    for release in releases.iter().take(20) {
+      if let Some(version) = release.get("version").and_then(|v| v.as_str()) {
+        versions.push(version.trim_start_matches('v').to_string());
+      }
+    }
+
+    Ok(versions)
   }
 }
 

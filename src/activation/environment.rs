@@ -241,6 +241,13 @@ echo "Run 'deactivate' to exit the realm environment"
 
         // Create symlink to shared Python binary
         let shared_python = runtime_manager.get_runtime_path(runtime);
+        if !shared_python.exists() {
+          return Err(anyhow!(
+            "Python binary not found at {}. Installation may have failed.",
+            shared_python.display()
+          ));
+        }
+
         let local_python = self.path.join("bin").join("python");
         let local_python3 = self.path.join("bin").join("python3");
 
@@ -249,11 +256,11 @@ echo "Run 'deactivate' to exit the realm environment"
           use std::os::unix::fs::symlink;
           if !local_python3.exists() {
             symlink(&shared_python, &local_python3)
-              .context("Failed to create python3 symlink")?;
+              .with_context(|| format!("Failed to create python3 symlink from {} to {}. You may need appropriate permissions.", shared_python.display(), local_python3.display()))?;
           }
           if !local_python.exists() {
             symlink(&shared_python, &local_python)
-              .context("Failed to create python symlink")?;
+              .with_context(|| format!("Failed to create python symlink from {} to {}", shared_python.display(), local_python.display()))?;
           }
         }
 
@@ -262,11 +269,11 @@ echo "Run 'deactivate' to exit the realm environment"
           use std::os::windows::fs::symlink_file;
           if !local_python3.exists() {
             symlink_file(&shared_python, local_python3.with_extension("exe"))
-              .context("Failed to create python3 symlink")?;
+              .context("Failed to create python3 symlink. You may need administrator privileges on Windows.")?;
           }
           if !local_python.exists() {
             symlink_file(&shared_python, local_python.with_extension("exe"))
-              .context("Failed to create python symlink")?;
+              .context("Failed to create python symlink. You may need administrator privileges on Windows.")?;
           }
         }
 
@@ -292,12 +299,14 @@ echo "Run 'deactivate' to exit the realm environment"
           {
             use std::os::unix::fs::symlink;
             if !local_pip3.exists() {
-              symlink(&pip_path, &local_pip3)
-                .context("Failed to create pip3 symlink")?;
+              if let Err(e) = symlink(&pip_path, &local_pip3) {
+                eprintln!("Warning: Failed to create pip3 symlink: {}", e);
+              }
             }
             if !local_pip.exists() {
-              symlink(&pip_path, &local_pip)
-                .context("Failed to create pip symlink")?;
+              if let Err(e) = symlink(&pip_path, &local_pip) {
+                eprintln!("Warning: Failed to create pip symlink: {}", e);
+              }
             }
           }
 
@@ -305,14 +314,18 @@ echo "Run 'deactivate' to exit the realm environment"
           {
             use std::os::windows::fs::symlink_file;
             if !local_pip3.exists() {
-              symlink_file(&pip_path, local_pip3.with_extension("exe"))
-                .context("Failed to create pip3 symlink")?;
+              if let Err(e) = symlink_file(&pip_path, local_pip3.with_extension("exe")) {
+                eprintln!("Warning: Failed to create pip3 symlink: {}", e);
+              }
             }
             if !local_pip.exists() {
-              symlink_file(&pip_path, local_pip.with_extension("exe"))
-                .context("Failed to create pip symlink")?;
+              if let Err(e) = symlink_file(&pip_path, local_pip.with_extension("exe")) {
+                eprintln!("Warning: Failed to create pip symlink: {}", e);
+              }
             }
           }
+        } else {
+          eprintln!("Warning: pip not found in Python installation. You may need to install it manually.");
         }
 
         println!("✨ Created per-project Python environment with isolated site-packages");
