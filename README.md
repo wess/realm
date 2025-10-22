@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/wess/realm/workflows/CI/badge.svg)](https://github.com/wess/realm/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Crates.io](https://img.shields.io/crates/v/realm.svg)](https://crates.io/crates/realm)
+[![Crates.io](https://img.shields.io/crates/v/realmenv.svg)](https://crates.io/crates/realmenv)
 [![GitHub release](https://img.shields.io/github/release/wess/realm.svg)](https://github.com/wess/realm/releases)
 
 ## What is Realm?
@@ -21,7 +21,7 @@ Realm eliminates the complexity of modern full-stack development by providing:
 ### From crates.io (Recommended)
 ```bash
 # Install using cargo
-cargo install realm
+cargo install realmenv
 ```
 
 ### From Source

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2025-01-22
+
+### Added
+- **Production-ready release** - Realm is now stable for production use
+- Python runtime support with complete virtualenv isolation
+- FastAPI template (React + FastAPI backend)
+- Comprehensive error handling with retry logic (3 attempts, 2s backoff)
+- Automatic cleanup of partial installations on failure
+- Cross-platform validation (Windows, macOS Intel/ARM, Linux x64/ARM64)
+- Working examples in `examples/` directory
+
+### Changed
+- Package published to crates.io as `realmenv` (binary name remains `realm`)
+- Improved error messages with actionable recovery suggestions
+- Enhanced documentation with installation methods and troubleshooting
+
+### Fixed
+- Documentation URLs now correctly point to GitHub README
+- Installation instructions updated to use correct crate name
+- Version synchronization across all project files
+
 ## [0.1.5] - 2025-01-07
 
 ### Changed
@@ -41,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proper secret handling in deployment artifacts
 - Secure environment variable isolation
 
-[Unreleased]: https://github.com/wess/realm/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/wess/realm/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/wess/realm/releases/tag/v1.0.0
 [0.1.5]: https://github.com/wess/realm/releases/tag/v0.1.5
 [0.1.0]: https://github.com/wess/realm/releases/tag/v0.1.0
