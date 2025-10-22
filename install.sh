@@ -23,7 +23,7 @@ ARCH=$(uname -m)
 # Map architecture names
 case "$ARCH" in
     x86_64)
-        ARCH="amd64"
+        ARCH="x64"
         ;;
     aarch64|arm64)
         ARCH="arm64"
@@ -40,7 +40,7 @@ case "$OS" in
         PLATFORM="linux"
         ;;
     darwin)
-        PLATFORM="macos"
+        PLATFORM="darwin"
         ;;
     mingw*|msys*|cygwin*)
         PLATFORM="windows"
@@ -54,12 +54,6 @@ case "$OS" in
         ;;
 esac
 
-# Construct asset name
-ASSET_NAME="realm-${PLATFORM}-${ARCH}"
-if [ "$PLATFORM" = "windows" ]; then
-    ASSET_NAME="${ASSET_NAME}.exe"
-fi
-
 echo -e "${BLUE}Installing Realm...${NC}"
 echo -e "Platform: ${PLATFORM}-${ARCH}"
 echo ""
@@ -72,8 +66,17 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Extract version and download URL
+# Extract version
 VERSION=$(echo "$LATEST_RELEASE" | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/')
+
+# Construct asset name with version
+if [ "$PLATFORM" = "windows" ]; then
+    ASSET_NAME="realm-${PLATFORM}-${ARCH}-${VERSION}.zip"
+else
+    ASSET_NAME="realm-${PLATFORM}-${ARCH}-${VERSION}.tar.gz"
+fi
+
+# Get download URL
 DOWNLOAD_URL=$(echo "$LATEST_RELEASE" | grep "browser_download_url.*$ASSET_NAME\"" | cut -d '"' -f 4)
 
 if [ -z "$DOWNLOAD_URL" ]; then
@@ -87,19 +90,35 @@ echo -e "${GREEN}✓${NC} Found version $VERSION"
 # Create install directory if it doesn't exist
 mkdir -p "$INSTALL_DIR"
 
-# Download binary
-TEMP_FILE=$(mktemp)
+# Download archive
+TEMP_DIR=$(mktemp -d)
+TEMP_FILE="$TEMP_DIR/$ASSET_NAME"
 echo -e "${YELLOW}→${NC} Downloading realm..."
 curl -L -o "$TEMP_FILE" "$DOWNLOAD_URL"
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to download realm${NC}"
-    rm -f "$TEMP_FILE"
+    rm -rf "$TEMP_DIR"
+    exit 1
+fi
+
+# Extract archive
+echo -e "${YELLOW}→${NC} Extracting..."
+if [ "$PLATFORM" = "windows" ]; then
+    unzip -q "$TEMP_FILE" -d "$TEMP_DIR"
+else
+    tar -xzf "$TEMP_FILE" -C "$TEMP_DIR"
+fi
+
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Failed to extract archive${NC}"
+    rm -rf "$TEMP_DIR"
     exit 1
 fi
 
 # Make executable and move to install directory
-chmod +x "$TEMP_FILE"
-mv "$TEMP_FILE" "$INSTALL_DIR/realm"
+chmod +x "$TEMP_DIR/realm"
+mv "$TEMP_DIR/realm" "$INSTALL_DIR/realm"
+rm -rf "$TEMP_DIR"
 
 echo -e "${GREEN}✓${NC} Installed realm to $INSTALL_DIR/realm"
 
