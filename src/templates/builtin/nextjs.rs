@@ -136,7 +136,7 @@ export async function GET() {
   let template = Template {
     name: "nextjs".to_string(),
     description: "Next.js 14 full-stack application with App Router".to_string(),
-    version: "1.0.0".to_string(),
+    version: "1.0.1".to_string(),
     files,
     realm_config,
     variables: HashMap::new(),

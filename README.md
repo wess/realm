@@ -95,10 +95,25 @@ realm init .venv
 ### 2. Activate Environment
 ```bash
 source .venv/bin/activate
-# Your shell now shows: (realm) $ 
+# Your shell now shows: (realm) $
 ```
 
-### 3. Start Development
+### 3. List Available Versions
+```bash
+# List available Python versions
+realm list --runtime=python
+
+# List available Node versions
+realm list --runtime=node
+
+# List available Bun versions
+realm list --runtime=bun
+
+# Clear cached version lists (24hr cache)
+realm cache clear
+```
+
+### 4. Start Development
 ```bash
 # Start all processes + proxy server
 realm start
@@ -108,7 +123,7 @@ realm proxy     # Just the proxy
 realm stop      # Stop everything
 ```
 
-### 4. Deploy
+### 5. Deploy
 ```bash
 # Generate Docker deployment artifacts
 realm bundle
@@ -177,7 +192,7 @@ realm init .venv
 realm init .venv --runtime=node@20
 
 # Use specific Bun version
-realm init .venv --runtime=bun@1.0.0
+realm init .venv --runtime=bun@1.0.1
 
 # Use Python with per-project isolation
 realm init .venv --runtime=python@3.12
@@ -243,7 +258,7 @@ Creates `dist/` with:
 │  └── docs: bun run docs                     │
 ├─────────────────────────────────────────────┤
 │  Runtime Manager                            │
-│  ├── Bun 1.0.0 (per project)               │
+│  ├── Bun 1.0.1 (per project)               │
 │  └── Node.js 20.5.0 (per project)          │
 ├─────────────────────────────────────────────┤
 │  Environment Manager                        │

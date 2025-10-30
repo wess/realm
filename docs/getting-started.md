@@ -78,7 +78,7 @@ The built-in proxy routes requests based on URL patterns:
 Realm supports both Bun and Node.js with version management:
 
 ```bash
-realm init --runtime bun@1.0.0
+realm init --runtime bun@1.0.1
 realm init --runtime node@18
 ```
 

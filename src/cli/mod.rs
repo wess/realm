@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use crate::activation::RealmEnvironment;
 use crate::bundle::Bundler;
+use crate::cache::CacheManager;
 use crate::config::RealmConfig;
 use crate::env::EnvManager;
 use crate::process::ProcessManager;
@@ -28,7 +29,7 @@ pub enum Commands {
     #[arg(default_value = ".venv")]
     path: PathBuf,
 
-    /// Runtime to use (bun, node, bun@1.0.0, node@18)
+    /// Runtime to use (bun, node, bun@1.0.1, node@18)
     #[arg(long, default_value = "bun")]
     runtime: String,
 
@@ -68,12 +69,24 @@ pub enum Commands {
     #[arg(long)]
     runtime: String,
   },
+
+  /// Cache management commands
+  Cache {
+    #[command(subcommand)]
+    command: CacheCommands,
+  },
 }
 
 #[derive(Subcommand)]
 pub enum TemplateCommands {
   /// List available templates
   List,
+}
+
+#[derive(Subcommand)]
+pub enum CacheCommands {
+  /// Clear all cached runtime versions
+  Clear,
 }
 
 pub struct CliHandler {
@@ -103,6 +116,7 @@ impl CliHandler {
       Commands::Create { template } => self.handle_create_template(template).await,
       Commands::Templates { command } => self.handle_templates(command).await,
       Commands::List { runtime } => self.handle_list(runtime).await,
+      Commands::Cache { command } => self.handle_cache(command).await,
     }
   }
 
@@ -115,12 +129,27 @@ impl CliHandler {
     println!("🏗️  Initializing realm environment...");
 
     // Parse runtime specification
-    let runtime = Runtime::parse(&runtime_spec)?;
+    let mut runtime = Runtime::parse(&runtime_spec)?;
 
-    // Install runtime if needed
-    if !self.runtime_manager.is_version_installed(&runtime) {
-      println!("📦 Getting {} {}...", runtime.name(), runtime.version());
-      self.runtime_manager.install_version(&runtime).await?;
+    // Check if we can use system-installed runtime
+    // Only use system runtime if user requested "latest" or didn't specify version
+    let use_system = runtime.version() == "latest" && self.runtime_manager.is_available_on_system(&runtime);
+
+    if use_system {
+      println!("✅ Using system-installed {} (found in PATH)", runtime.name());
+    } else {
+      // Resolve "latest" to actual version if needed for .realm installation
+      if runtime.version() == "latest" {
+        runtime = self.runtime_manager.resolve_latest_to_actual(&runtime).await?;
+      }
+
+      // Install runtime if not already installed in ~/.realm
+      if !self.runtime_manager.is_version_installed(&runtime) {
+        println!("📦 Getting {} {}...", runtime.name(), runtime.version());
+        self.runtime_manager.install_version(&runtime).await?;
+      } else {
+        println!("✅ {} {} already installed", runtime.name(), runtime.version());
+      }
     }
 
     // Create project from template if specified
@@ -290,6 +319,20 @@ impl CliHandler {
     }
 
     Ok(())
+  }
+
+  async fn handle_cache(&self, command: CacheCommands) -> Result<()> {
+    match command {
+      CacheCommands::Clear => {
+        println!("🗑️  Clearing runtime version cache...");
+
+        let cache_manager = CacheManager::new()?;
+        cache_manager.clear_all()?;
+
+        println!("✅ Cache cleared successfully");
+        Ok(())
+      }
+    }
   }
 }
 

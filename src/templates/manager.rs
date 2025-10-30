@@ -42,7 +42,7 @@ impl TemplateManager {
     let template = Template {
       name: name.to_string(),
       description: format!("Template created from {}", current_dir.display()),
-      version: "1.0.0".to_string(),
+      version: "1.0.1".to_string(),
       files,
       realm_config,
       variables: std::collections::HashMap::new(),

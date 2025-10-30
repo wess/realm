@@ -122,7 +122,7 @@ if __name__ == "__main__":
   let template = Template {
     name: "react-fastapi".to_string(),
     description: "React frontend with FastAPI backend using Python".to_string(),
-    version: "1.0.0".to_string(),
+    version: "1.0.1".to_string(),
     files,
     realm_config,
     variables: HashMap::new(),

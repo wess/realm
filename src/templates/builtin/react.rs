@@ -121,7 +121,7 @@ app.listen(PORT, () => {
   let template = Template {
     name: "react-express".to_string(),
     description: "React frontend with Express backend using Bun".to_string(),
-    version: "1.0.0".to_string(),
+    version: "1.0.1".to_string(),
     files,
     realm_config,
     variables: HashMap::new(),

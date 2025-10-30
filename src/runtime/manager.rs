@@ -1,3 +1,4 @@
+use crate::cache::CacheManager;
 use crate::errors::{RealmError, RuntimeError, Result};
 use dirs::home_dir;
 use flate2::read::GzDecoder;
@@ -126,6 +127,7 @@ pub struct RuntimeConfig {
   pub http_client: Client,
   pub allowed_hosts: Vec<String>,
   pub verify_checksums: bool,
+  pub cache_manager: CacheManager,
 }
 
 pub fn create_runtime_config() -> Result<RuntimeConfig> {
@@ -156,6 +158,8 @@ pub fn create_runtime_config() -> Result<RuntimeConfig> {
       )))
     })?;
 
+  let cache_manager = CacheManager::new()?;
+
   Ok(RuntimeConfig {
     realm_dir,
     http_client,
@@ -165,6 +169,7 @@ pub fn create_runtime_config() -> Result<RuntimeConfig> {
       "api.github.com".to_string(),
     ],
     verify_checksums: true,
+    cache_manager,
   })
 }
 
@@ -203,6 +208,29 @@ impl RuntimeManager {
 
   pub fn is_version_installed(&self, runtime: &Runtime) -> bool {
     self.get_runtime_path(runtime).exists()
+  }
+
+  pub fn is_available_on_system(&self, runtime: &Runtime) -> bool {
+    let command_name = runtime.name();
+    Command::new("which")
+      .arg(command_name)
+      .output()
+      .map(|output| output.status.success())
+      .unwrap_or(false)
+  }
+
+  pub async fn resolve_latest_to_actual(&self, runtime: &Runtime) -> Result<Runtime> {
+    if runtime.version() != "latest" {
+      return Ok(runtime.clone());
+    }
+
+    let actual_version = match runtime {
+      Runtime::Bun(_) => self.get_latest_bun_version().await?,
+      Runtime::Node(_) => self.get_latest_node_version().await?,
+      Runtime::Python(_) => self.get_latest_python_version().await?,
+    };
+
+    Ok(Runtime::from_name_version(runtime.name(), &actual_version))
   }
 
   pub async fn install_version(&self, runtime: &Runtime) -> Result<()> {
@@ -765,6 +793,33 @@ impl RuntimeManager {
   }
 
   async fn list_python_versions(&self) -> Result<Vec<String>> {
+    let cache_key = "python_versions";
+
+    // Try cache first
+    if let Some(cached) = self.config.cache_manager.get::<Vec<String>>(cache_key)? {
+      return Ok(cached);
+    }
+
+    // Fetch from network
+    let versions = match self.fetch_python_versions().await {
+      Ok(v) => v,
+      Err(e) => {
+        // Try stale cache on network failure
+        if let Some(stale) = self.config.cache_manager.get_stale::<Vec<String>>(cache_key)? {
+          eprintln!("Warning: using stale cache due to network error: {}", e);
+          return Ok(stale);
+        }
+        return Err(e);
+      }
+    };
+
+    // Cache the result
+    let _ = self.config.cache_manager.set(cache_key, &versions);
+
+    Ok(versions)
+  }
+
+  async fn fetch_python_versions(&self) -> Result<Vec<String>> {
     let client = Client::builder()
       .user_agent("realm")
       .build()
@@ -830,6 +885,33 @@ impl RuntimeManager {
   }
 
   async fn list_bun_versions(&self) -> Result<Vec<String>> {
+    let cache_key = "bun_versions";
+
+    // Try cache first
+    if let Some(cached) = self.config.cache_manager.get::<Vec<String>>(cache_key)? {
+      return Ok(cached);
+    }
+
+    // Fetch from network
+    let versions = match self.fetch_bun_versions().await {
+      Ok(v) => v,
+      Err(e) => {
+        // Try stale cache on network failure
+        if let Some(stale) = self.config.cache_manager.get_stale::<Vec<String>>(cache_key)? {
+          eprintln!("Warning: using stale cache due to network error: {}", e);
+          return Ok(stale);
+        }
+        return Err(e);
+      }
+    };
+
+    // Cache the result
+    let _ = self.config.cache_manager.set(cache_key, &versions);
+
+    Ok(versions)
+  }
+
+  async fn fetch_bun_versions(&self) -> Result<Vec<String>> {
     let client = Client::builder()
       .user_agent("realm")
       .build()
@@ -870,6 +952,33 @@ impl RuntimeManager {
   }
 
   async fn list_node_versions(&self) -> Result<Vec<String>> {
+    let cache_key = "node_versions";
+
+    // Try cache first
+    if let Some(cached) = self.config.cache_manager.get::<Vec<String>>(cache_key)? {
+      return Ok(cached);
+    }
+
+    // Fetch from network
+    let versions = match self.fetch_node_versions().await {
+      Ok(v) => v,
+      Err(e) => {
+        // Try stale cache on network failure
+        if let Some(stale) = self.config.cache_manager.get_stale::<Vec<String>>(cache_key)? {
+          eprintln!("Warning: using stale cache due to network error: {}", e);
+          return Ok(stale);
+        }
+        return Err(e);
+      }
+    };
+
+    // Cache the result
+    let _ = self.config.cache_manager.set(cache_key, &versions);
+
+    Ok(versions)
+  }
+
+  async fn fetch_node_versions(&self) -> Result<Vec<String>> {
     let client = Client::builder()
       .user_agent("realm")
       .build()

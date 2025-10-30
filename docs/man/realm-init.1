@@ -27,7 +27,7 @@ Path for the realm environment (default: .venv)
 .BR \-\-runtime " " \fISPEC\fR
 Runtime to use. Can be just the name or include version specification.
 .br
-Examples: bun, node, bun@1.0.0, node@18
+Examples: bun, node, bun@1.0.1, node@18
 .br
 Default: bun
 .TP
@@ -52,8 +52,8 @@ Runtime specifications can include version numbers:
 .B bun
 Latest stable Bun release
 .TP
-.B bun@1.0.0
-Specific Bun version 1.0.0
+.B bun@1.0.1
+Specific Bun version 1.0.1
 .TP
 .B node
 Latest LTS Node.js release
@@ -110,7 +110,7 @@ realm init myproject --runtime node@18
 Initialize with React template and specific Bun version:
 .nf
 .RS
-realm init --runtime bun@1.0.0 --template react
+realm init --runtime bun@1.0.1 --template react
 .RE
 .fi
 .PP

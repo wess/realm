@@ -179,7 +179,7 @@ start();
   let template = Template {
     name: "svelte-fastify".to_string(),
     description: "SvelteKit frontend with Fastify backend using Bun".to_string(),
-    version: "1.0.0".to_string(),
+    version: "1.0.1".to_string(),
     files,
     realm_config,
     variables: HashMap::new(),

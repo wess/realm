@@ -1,5 +1,6 @@
 pub mod activation;
 pub mod bundle;
+pub mod cache;
 pub mod cli;
 pub mod config;
 pub mod env;
