@@ -47,6 +47,8 @@ pub enum RuntimeError {
   UnsupportedPlatform(String),
   InvalidVersion(String),
   ExtractionFailed(String),
+  VersionFetchFailed(String),
+  VersionNotFound(String),
 }
 
 #[derive(Debug, Clone)]
@@ -117,6 +119,8 @@ impl fmt::Display for RuntimeError {
       RuntimeError::UnsupportedPlatform(platform) => write!(f, "Unsupported platform: {platform}"),
       RuntimeError::InvalidVersion(version) => write!(f, "Invalid version: {version}"),
       RuntimeError::ExtractionFailed(msg) => write!(f, "Extraction failed: {msg}"),
+      RuntimeError::VersionFetchFailed(msg) => write!(f, "Version fetch failed: {msg}"),
+      RuntimeError::VersionNotFound(msg) => write!(f, "Version not found: {msg}"),
     }
   }
 }

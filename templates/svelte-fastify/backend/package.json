@@ -1,0 +1,14 @@
+{
+  "name": "fastify-backend",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot server.ts"
+  },
+  "dependencies": {
+    "fastify": "^4.24.0",
+    "@fastify/cors": "^8.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}

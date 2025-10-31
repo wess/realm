@@ -1,26 +1,25 @@
 use crate::cache::CacheManager;
-use crate::errors::{RealmError, RuntimeError, Result};
+use crate::errors::{RealmError, Result, RuntimeError};
 use dirs::home_dir;
 use flate2::read::GzDecoder;
+use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 use tar::Archive;
 
+use super::registry::RuntimeRegistry;
 use super::types::Runtime;
 
 pub fn validate_download_url(url: &str, allowed_hosts: &[String]) -> Result<()> {
   let parsed_url = url::Url::parse(url).map_err(|e| {
-    RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
-      "Invalid URL: {e}"
-    )))
+    RealmError::RuntimeError(RuntimeError::DownloadFailed(format!("Invalid URL: {e}")))
   })?;
 
   let host = parsed_url.host_str().ok_or_else(|| {
-    RealmError::RuntimeError(RuntimeError::DownloadFailed(
-      "URL has no host".to_string(),
-    ))
+    RealmError::RuntimeError(RuntimeError::DownloadFailed("URL has no host".to_string()))
   })?;
 
   if !allowed_hosts.iter().any(|allowed| host.ends_with(allowed)) {
@@ -84,10 +83,7 @@ pub fn extract_zip_safely(zip_bytes: &[u8], extract_to: &Path) -> Result<()> {
 
   if !output.status.success() {
     return Err(RealmError::RuntimeError(RuntimeError::ExtractionFailed(
-      format!(
-        "Unzip failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-      ),
+      format!("Unzip failed: {}", String::from_utf8_lossy(&output.stderr)),
     )));
   }
 
@@ -120,6 +116,19 @@ pub fn cleanup_temp_directories(temp_dirs: &[PathBuf]) {
   for dir in temp_dirs {
     let _ = fs::remove_dir_all(dir);
   }
+}
+
+fn create_progress_bar(total_size: u64, runtime_name: &str) -> ProgressBar {
+  let pb = ProgressBar::new(total_size);
+  pb.set_style(
+    ProgressStyle::default_bar()
+      .template(&format!(
+        "{{spinner:.green}} [{{bar:40.cyan/blue}}] {{bytes}}/{{total_bytes}} ({runtime_name})"
+      ))
+      .unwrap()
+      .progress_chars("█▓▒░ "),
+  );
+  pb
 }
 
 pub struct RuntimeConfig {
@@ -175,12 +184,23 @@ pub fn create_runtime_config() -> Result<RuntimeConfig> {
 
 pub struct RuntimeManager {
   config: RuntimeConfig,
+  registry: Arc<RuntimeRegistry>,
 }
 
 impl RuntimeManager {
   pub fn new() -> Result<Self> {
     let config = create_runtime_config()?;
-    Ok(Self { config })
+    let registry = Arc::new(RuntimeRegistry::new());
+    Ok(Self { config, registry })
+  }
+
+  pub async fn init(&mut self) -> Result<()> {
+    // Load runtimes from embedded and user directories
+    Arc::get_mut(&mut self.registry)
+      .ok_or_else(|| RealmError::ValidationError("Failed to get mutable registry".to_string()))?
+      .discover_runtimes()
+      .await?;
+    Ok(())
   }
 
   pub fn get_runtime_versions_dir(&self, runtime: &Runtime) -> PathBuf {
@@ -224,10 +244,16 @@ impl RuntimeManager {
       return Ok(runtime.clone());
     }
 
-    let actual_version = match runtime {
-      Runtime::Bun(_) => self.get_latest_bun_version().await?,
-      Runtime::Node(_) => self.get_latest_node_version().await?,
-      Runtime::Python(_) => self.get_latest_python_version().await?,
+    // Try to use declarative provider from registry first
+    let actual_version = if let Some(provider) = self.registry.get(runtime.name()) {
+      provider.resolve_latest().await?
+    } else {
+      // Fallback to hardcoded methods
+      match runtime {
+        Runtime::Bun(_) => self.get_latest_bun_version().await?,
+        Runtime::Node(_) => self.get_latest_node_version().await?,
+        Runtime::Python(_) => self.get_latest_python_version().await?,
+      }
     };
 
     Ok(Runtime::from_name_version(runtime.name(), &actual_version))
@@ -238,11 +264,133 @@ impl RuntimeManager {
       return Ok(());
     }
 
+    // Try to use declarative provider from registry first
+    if let Some(provider) = self.registry.get(runtime.name()) {
+      return self.install_via_provider(provider, runtime).await;
+    }
+
+    // Fallback to hardcoded methods for backwards compatibility
     match runtime {
       Runtime::Bun(version) => self.install_bun_version(version).await,
       Runtime::Node(version) => self.install_node_version(version).await,
       Runtime::Python(version) => self.install_python_version(version).await,
     }
+  }
+
+  async fn install_via_provider(
+    &self,
+    provider: Arc<dyn super::provider::RuntimeProvider>,
+    runtime: &Runtime,
+  ) -> Result<()> {
+    use super::provider::PlatformInfo;
+
+    let version = runtime.version();
+    println!("Installing {} {}", provider.display_name(), version);
+
+    // Resolve "latest" to actual version
+    let actual_version = if version == "latest" {
+      provider.resolve_latest().await?
+    } else {
+      version.to_string()
+    };
+
+    let (os, arch) = get_platform_info()?;
+    let platform = PlatformInfo { os, arch };
+
+    let version_dir = self.get_runtime_versions_dir(runtime).join(&actual_version);
+
+    // Attempt download with retries
+    const MAX_RETRIES: u32 = 3;
+    let mut last_error = None;
+
+    for attempt in 1..=MAX_RETRIES {
+      if attempt > 1 {
+        println!("Retry {}/{MAX_RETRIES}...", attempt - 1);
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+      }
+
+      match self
+        .download_and_install_via_provider(&provider, &actual_version, &platform, &version_dir)
+        .await
+      {
+        Ok(_) => {
+          println!(
+            "{} {} installed successfully",
+            provider.display_name(),
+            actual_version
+          );
+          return Ok(());
+        }
+        Err(e) => {
+          last_error = Some(e);
+          let _ = fs::remove_dir_all(&version_dir);
+        }
+      }
+    }
+
+    Err(last_error.unwrap_or_else(|| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(
+        "Unknown error during installation".to_string(),
+      ))
+    }))
+  }
+
+  async fn download_and_install_via_provider(
+    &self,
+    provider: &Arc<dyn super::provider::RuntimeProvider>,
+    version: &str,
+    platform: &super::provider::PlatformInfo,
+    install_dir: &PathBuf,
+  ) -> Result<()> {
+    // Get artifact metadata
+    let artifact = provider.get_artifact(version, platform).await?;
+
+    // Download artifact
+    let response = self
+      .config
+      .http_client
+      .get(&artifact.url)
+      .send()
+      .await
+      .map_err(|e| {
+        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+          "Failed to download: {}",
+          e
+        )))
+      })?;
+
+    if !response.status().is_success() {
+      return Err(RealmError::RuntimeError(RuntimeError::DownloadFailed(
+        format!("HTTP {} - Download failed", response.status()),
+      )));
+    }
+
+    let total_size = response.content_length().unwrap_or(0);
+    let pb = create_progress_bar(total_size, provider.name());
+
+    // Download with progress
+    use futures_util::StreamExt;
+    let mut stream = response.bytes_stream();
+    let mut downloaded: Vec<u8> = Vec::with_capacity(total_size as usize);
+
+    while let Some(chunk) = stream.next().await {
+      let chunk = chunk.map_err(|e| RealmError::NetworkError(e.to_string()))?;
+      downloaded.extend_from_slice(&chunk);
+      pb.inc(chunk.len() as u64);
+    }
+
+    pb.finish_with_message("Downloaded");
+
+    // Install artifact
+    fs::create_dir_all(install_dir)?;
+    provider
+      .install_artifact(&downloaded, &artifact, install_dir)
+      .await?;
+
+    // Run post-install
+    provider.post_install(install_dir).await?;
+
+    Ok(())
   }
 
   async fn install_bun_version(&self, version: &str) -> Result<()> {
@@ -280,7 +428,10 @@ impl RuntimeManager {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
       }
 
-      match self.download_and_install_bun(&download_url, &version_dir, &actual_version, &os, &arch).await {
+      match self
+        .download_and_install_bun(&download_url, &version_dir, &actual_version, &os, arch)
+        .await
+      {
         Ok(_) => {
           println!("Bun {actual_version} installed successfully");
           return Ok(());
@@ -295,14 +446,22 @@ impl RuntimeManager {
 
     Err(last_error.unwrap_or_else(|| {
       RealmError::RuntimeError(RuntimeError::DownloadFailed(
-        "Unknown error during installation".to_string()
+        "Unknown error during installation".to_string(),
       ))
     }))
   }
 
-  async fn download_and_install_bun(&self, download_url: &str, version_dir: &Path, _actual_version: &str, os: &str, arch: &str) -> Result<()> {
+  async fn download_and_install_bun(
+    &self,
+    download_url: &str,
+    version_dir: &Path,
+    actual_version: &str,
+    os: &str,
+    arch: &str,
+  ) -> Result<()> {
     let response = self
-      .config.http_client
+      .config
+      .http_client
       .get(download_url)
       .send()
       .await
@@ -318,11 +477,41 @@ impl RuntimeManager {
       )));
     }
 
-    let bytes = response.bytes().await.map_err(|e| {
-      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
-        "Failed to download file: {e}. The connection may have been interrupted."
-      )))
-    })?;
+    // Get content length for progress bar
+    let total_size = response.content_length().unwrap_or(0);
+    let pb = if total_size > 0 {
+      Some(create_progress_bar(
+        total_size,
+        &format!("Bun {actual_version}"),
+      ))
+    } else {
+      None
+    };
+
+    // Download with progress tracking
+    let mut downloaded = 0u64;
+    let mut stream = response.bytes_stream();
+    let mut data = Vec::new();
+
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+      let chunk = chunk.map_err(|e| {
+        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+          "Failed to download file: {e}. The connection may have been interrupted."
+        )))
+      })?;
+      data.extend_from_slice(&chunk);
+      downloaded += chunk.len() as u64;
+      if let Some(ref pb) = pb {
+        pb.set_position(downloaded);
+      }
+    }
+
+    if let Some(pb) = pb {
+      pb.finish_with_message("Download complete");
+    }
+
+    let bytes = bytes::Bytes::from(data);
 
     fs::create_dir_all(version_dir).map_err(|e| {
       RealmError::RuntimeError(RuntimeError::InstallationFailed(format!(
@@ -346,7 +535,7 @@ impl RuntimeManager {
       set_executable_permissions(&target_bun)?;
     } else {
       return Err(RealmError::RuntimeError(RuntimeError::ExtractionFailed(
-        format!("Expected binary not found in archive. The download may be corrupted.")
+        "Expected binary not found in archive. The download may be corrupted.".to_string(),
       )));
     }
 
@@ -385,7 +574,10 @@ impl RuntimeManager {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
       }
 
-      match self.download_and_install_node(&download_url, &version_dir, &actual_version, &os, &arch).await {
+      match self
+        .download_and_install_node(&download_url, &version_dir, &actual_version, &os, &arch)
+        .await
+      {
         Ok(_) => {
           println!("Node.js {actual_version} installed successfully");
           return Ok(());
@@ -400,14 +592,22 @@ impl RuntimeManager {
 
     Err(last_error.unwrap_or_else(|| {
       RealmError::RuntimeError(RuntimeError::DownloadFailed(
-        "Unknown error during installation".to_string()
+        "Unknown error during installation".to_string(),
       ))
     }))
   }
 
-  async fn download_and_install_node(&self, download_url: &str, version_dir: &Path, actual_version: &str, os: &str, arch: &str) -> Result<()> {
+  async fn download_and_install_node(
+    &self,
+    download_url: &str,
+    version_dir: &Path,
+    actual_version: &str,
+    os: &str,
+    arch: &str,
+  ) -> Result<()> {
     let response = self
-      .config.http_client
+      .config
+      .http_client
       .get(download_url)
       .send()
       .await
@@ -423,11 +623,41 @@ impl RuntimeManager {
       )));
     }
 
-    let bytes = response.bytes().await.map_err(|e| {
-      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
-        "Failed to download file: {e}. The connection may have been interrupted."
-      )))
-    })?;
+    // Get content length for progress bar
+    let total_size = response.content_length().unwrap_or(0);
+    let pb = if total_size > 0 {
+      Some(create_progress_bar(
+        total_size,
+        &format!("Node.js {actual_version}"),
+      ))
+    } else {
+      None
+    };
+
+    // Download with progress tracking
+    let mut downloaded = 0u64;
+    let mut stream = response.bytes_stream();
+    let mut data = Vec::new();
+
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+      let chunk = chunk.map_err(|e| {
+        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+          "Failed to download file: {e}. The connection may have been interrupted."
+        )))
+      })?;
+      data.extend_from_slice(&chunk);
+      downloaded += chunk.len() as u64;
+      if let Some(ref pb) = pb {
+        pb.set_position(downloaded);
+      }
+    }
+
+    if let Some(pb) = pb {
+      pb.finish_with_message("Download complete");
+    }
+
+    let bytes = bytes::Bytes::from(data);
 
     fs::create_dir_all(version_dir).map_err(|e| {
       RealmError::RuntimeError(RuntimeError::InstallationFailed(format!(
@@ -441,13 +671,11 @@ impl RuntimeManager {
     let tar = GzDecoder::new(tar_gz);
     let mut archive = Archive::new(tar);
 
-    archive
-      .unpack(version_dir)
-      .map_err(|e| {
-        RealmError::RuntimeError(RuntimeError::ExtractionFailed(format!(
-          "Failed to extract archive: {e}. The download may be corrupted."
-        )))
-      })?;
+    archive.unpack(version_dir).map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::ExtractionFailed(format!(
+        "Failed to extract archive: {e}. The download may be corrupted."
+      )))
+    })?;
 
     // Move extracted contents to proper location
     let extracted_dir = version_dir.join(format!("node-v{actual_version}-{os}-{arch}"));
@@ -478,7 +706,7 @@ impl RuntimeManager {
       cleanup_temp_directories(&[extracted_dir]);
     } else {
       return Err(RealmError::RuntimeError(RuntimeError::ExtractionFailed(
-        format!("Expected directory not found in archive. The download may be corrupted.")
+        "Expected directory not found in archive. The download may be corrupted.".to_string(),
       )));
     }
 
@@ -489,16 +717,9 @@ impl RuntimeManager {
     let url = "https://api.github.com/repos/oven-sh/bun/releases/latest";
     validate_download_url(url, &self.config.allowed_hosts)?;
 
-    let response = self
-      .config.http_client
-      .get(url)
-      .send()
-      .await
-      .map_err(|e| {
-        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
-          "Request failed: {e}"
-        )))
-      })?;
+    let response = self.config.http_client.get(url).send().await.map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!("Request failed: {e}")))
+    })?;
 
     let json: serde_json::Value = response.json().await.map_err(|e| {
       RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
@@ -520,16 +741,9 @@ impl RuntimeManager {
     let url = "https://nodejs.org/dist/index.json";
     validate_download_url(url, &self.config.allowed_hosts)?;
 
-    let response = self
-      .config.http_client
-      .get(url)
-      .send()
-      .await
-      .map_err(|e| {
-        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
-          "Request failed: {e}"
-        )))
-      })?;
+    let response = self.config.http_client.get(url).send().await.map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!("Request failed: {e}")))
+    })?;
 
     let versions: serde_json::Value = response.json().await.map_err(|e| {
       RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
@@ -570,7 +784,11 @@ impl RuntimeManager {
     // Using latest known stable release: 20241016
     // Format: cpython-VERSION+RELEASE-ARCH-PLATFORM-install_only.tar.gz
     let release_tag = "20241016";
-    let platform_suffix = if os == "darwin" { "apple-darwin" } else { "linux-gnu" };
+    let platform_suffix = if os == "darwin" {
+      "apple-darwin"
+    } else {
+      "linux-gnu"
+    };
 
     let download_url = format!(
       "https://github.com/indygreg/python-build-standalone/releases/download/{release_tag}/cpython-{actual_version}+{release_tag}-{arch_name}-unknown-{platform_suffix}-install_only.tar.gz"
@@ -592,7 +810,10 @@ impl RuntimeManager {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
       }
 
-      match self.download_and_install_python(&download_url, &version_dir, &actual_version).await {
+      match self
+        .download_and_install_python(&download_url, &version_dir, &actual_version)
+        .await
+      {
         Ok(_) => {
           println!("Python {actual_version} installed successfully");
           return Ok(());
@@ -606,14 +827,20 @@ impl RuntimeManager {
 
     Err(last_error.unwrap_or_else(|| {
       RealmError::RuntimeError(RuntimeError::DownloadFailed(
-        "Unknown error during installation".to_string()
+        "Unknown error during installation".to_string(),
       ))
     }))
   }
 
-  async fn download_and_install_python(&self, download_url: &str, version_dir: &Path, _actual_version: &str) -> Result<()> {
+  async fn download_and_install_python(
+    &self,
+    download_url: &str,
+    version_dir: &Path,
+    actual_version: &str,
+  ) -> Result<()> {
     let response = self
-      .config.http_client
+      .config
+      .http_client
       .get(download_url)
       .send()
       .await
@@ -631,17 +858,47 @@ impl RuntimeManager {
            Supported versions: 3.8.x, 3.9.x, 3.10.x, 3.11.x, 3.12.x, 3.13.x\n\
            Visit https://github.com/indygreg/python-build-standalone/releases/tag/20241016 for available builds.",
           response.status(),
-          _actual_version,
+          actual_version,
           download_url
         ),
       )));
     }
 
-    let bytes = response.bytes().await.map_err(|e| {
-      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
-        "Failed to download file: {e}. The connection may have been interrupted."
-      )))
-    })?;
+    // Get content length for progress bar
+    let total_size = response.content_length().unwrap_or(0);
+    let pb = if total_size > 0 {
+      Some(create_progress_bar(
+        total_size,
+        &format!("Python {actual_version}"),
+      ))
+    } else {
+      None
+    };
+
+    // Download with progress tracking
+    let mut downloaded = 0u64;
+    let mut stream = response.bytes_stream();
+    let mut data = Vec::new();
+
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+      let chunk = chunk.map_err(|e| {
+        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+          "Failed to download file: {e}. The connection may have been interrupted."
+        )))
+      })?;
+      data.extend_from_slice(&chunk);
+      downloaded += chunk.len() as u64;
+      if let Some(ref pb) = pb {
+        pb.set_position(downloaded);
+      }
+    }
+
+    if let Some(pb) = pb {
+      pb.finish_with_message("Download complete");
+    }
+
+    let bytes = bytes::Bytes::from(data);
 
     fs::create_dir_all(version_dir).map_err(|e| {
       RealmError::RuntimeError(RuntimeError::InstallationFailed(format!(
@@ -656,20 +913,21 @@ impl RuntimeManager {
     let mut archive = Archive::new(tar);
 
     // Python build standalone extracts to python/ subdirectory
-    let temp_extract = version_dir.parent().unwrap().join(format!("temp_{}", version_dir.file_name().unwrap().to_string_lossy()));
+    let temp_extract = version_dir.parent().unwrap().join(format!(
+      "temp_{}",
+      version_dir.file_name().unwrap().to_string_lossy()
+    ));
     fs::create_dir_all(&temp_extract).map_err(|e| {
       RealmError::RuntimeError(RuntimeError::InstallationFailed(format!(
         "Failed to create temp directory: {e}"
       )))
     })?;
 
-    archive
-      .unpack(&temp_extract)
-      .map_err(|e| {
-        RealmError::RuntimeError(RuntimeError::ExtractionFailed(format!(
-          "Failed to extract archive: {e}. The download may be corrupted."
-        )))
-      })?;
+    archive.unpack(&temp_extract).map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::ExtractionFailed(format!(
+        "Failed to extract archive: {e}. The download may be corrupted."
+      )))
+    })?;
 
     // Move python/ contents to version_dir
     let python_dir = temp_extract.join("python");
@@ -699,7 +957,8 @@ impl RuntimeManager {
     } else {
       cleanup_temp_directories(&[temp_extract]);
       return Err(RealmError::RuntimeError(RuntimeError::ExtractionFailed(
-        "Expected python/ directory not found in archive. The download may be corrupted.".to_string()
+        "Expected python/ directory not found in archive. The download may be corrupted."
+          .to_string(),
       )));
     }
 
@@ -734,7 +993,7 @@ impl RuntimeManager {
           None
         }
       }
-      Runtime::Bun(_) => None, // Bun doesn't use npm
+      Runtime::Bun(_) => None,    // Bun doesn't use npm
       Runtime::Python(_) => None, // Python uses pip
     }
   }
@@ -773,18 +1032,35 @@ impl RuntimeManager {
       )));
     }
 
-    Command::new(runtime_path)
-      .args(args)
-      .spawn()
-      .map_err(|e| {
-        RealmError::RuntimeError(RuntimeError::InstallationFailed(format!(
-          "Failed to start {}: {e}",
-          runtime.name()
-        )))
-      })
+    Command::new(runtime_path).args(args).spawn().map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::InstallationFailed(format!(
+        "Failed to start {}: {e}",
+        runtime.name()
+      )))
+    })
   }
 
   pub async fn list_available_versions(&self, runtime: &Runtime) -> Result<Vec<String>> {
+    // Try to use declarative provider from registry first
+    if let Some(provider) = self.registry.get(runtime.name()) {
+      let cache_key = format!("{}_versions", runtime.name());
+
+      // Try cache first
+      if let Some(cached) = self.config.cache_manager.get::<Vec<String>>(&cache_key)? {
+        use colored::*;
+        eprintln!("{}", "   (using cached data)".bright_black());
+        return Ok(cached);
+      }
+
+      let versions = provider.list_versions().await?;
+
+      // Cache the result
+      self.config.cache_manager.set(&cache_key, &versions)?;
+
+      return Ok(versions);
+    }
+
+    // Fallback to hardcoded methods
     match runtime {
       Runtime::Python(_) => self.list_python_versions().await,
       Runtime::Bun(_) => self.list_bun_versions().await,
@@ -797,16 +1073,28 @@ impl RuntimeManager {
 
     // Try cache first
     if let Some(cached) = self.config.cache_manager.get::<Vec<String>>(cache_key)? {
+      use colored::*;
+      eprintln!("{}", "   (using cached data)".bright_black());
       return Ok(cached);
     }
 
     // Fetch from network
+    use colored::*;
+    eprintln!("{}", "   (fetching from network...)".bright_black());
     let versions = match self.fetch_python_versions().await {
       Ok(v) => v,
       Err(e) => {
         // Try stale cache on network failure
-        if let Some(stale) = self.config.cache_manager.get_stale::<Vec<String>>(cache_key)? {
-          eprintln!("Warning: using stale cache due to network error: {}", e);
+        if let Some(stale) = self
+          .config
+          .cache_manager
+          .get_stale::<Vec<String>>(cache_key)?
+        {
+          eprintln!(
+            "{} {}",
+            "⚠".yellow(),
+            "Using stale cache due to network error".yellow()
+          );
           return Ok(stale);
         }
         return Err(e);
@@ -820,14 +1108,11 @@ impl RuntimeManager {
   }
 
   async fn fetch_python_versions(&self) -> Result<Vec<String>> {
-    let client = Client::builder()
-      .user_agent("realm")
-      .build()
-      .map_err(|e| {
-        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
-          "Failed to create HTTP client: {e}"
-        )))
-      })?;
+    let client = Client::builder().user_agent("realm").build().map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+        "Failed to create HTTP client: {e}"
+      )))
+    })?;
 
     let release_tag = "20241016";
     let url = format!(
@@ -843,7 +1128,10 @@ impl RuntimeManager {
 
     if !response.status().is_success() {
       return Err(RealmError::RuntimeError(RuntimeError::DownloadFailed(
-        format!("Failed to fetch Python versions: HTTP {}", response.status()),
+        format!(
+          "Failed to fetch Python versions: HTTP {}",
+          response.status()
+        ),
       )));
     }
 
@@ -871,11 +1159,8 @@ impl RuntimeManager {
     }
 
     versions.sort_by(|a, b| {
-      let parse_version = |s: &str| -> Vec<u32> {
-        s.split('.')
-          .filter_map(|part| part.parse().ok())
-          .collect()
-      };
+      let parse_version =
+        |s: &str| -> Vec<u32> { s.split('.').filter_map(|part| part.parse().ok()).collect() };
       let a_parts = parse_version(a);
       let b_parts = parse_version(b);
       b_parts.cmp(&a_parts)
@@ -889,16 +1174,28 @@ impl RuntimeManager {
 
     // Try cache first
     if let Some(cached) = self.config.cache_manager.get::<Vec<String>>(cache_key)? {
+      use colored::*;
+      eprintln!("{}", "   (using cached data)".bright_black());
       return Ok(cached);
     }
 
     // Fetch from network
+    use colored::*;
+    eprintln!("{}", "   (fetching from network...)".bright_black());
     let versions = match self.fetch_bun_versions().await {
       Ok(v) => v,
       Err(e) => {
         // Try stale cache on network failure
-        if let Some(stale) = self.config.cache_manager.get_stale::<Vec<String>>(cache_key)? {
-          eprintln!("Warning: using stale cache due to network error: {}", e);
+        if let Some(stale) = self
+          .config
+          .cache_manager
+          .get_stale::<Vec<String>>(cache_key)?
+        {
+          eprintln!(
+            "{} {}",
+            "⚠".yellow(),
+            "Using stale cache due to network error".yellow()
+          );
           return Ok(stale);
         }
         return Err(e);
@@ -912,14 +1209,11 @@ impl RuntimeManager {
   }
 
   async fn fetch_bun_versions(&self) -> Result<Vec<String>> {
-    let client = Client::builder()
-      .user_agent("realm")
-      .build()
-      .map_err(|e| {
-        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
-          "Failed to create HTTP client: {e}"
-        )))
-      })?;
+    let client = Client::builder().user_agent("realm").build().map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+        "Failed to create HTTP client: {e}"
+      )))
+    })?;
 
     let url = "https://api.github.com/repos/oven-sh/bun/releases";
     let response = client.get(url).send().await.map_err(|e| {
@@ -956,16 +1250,28 @@ impl RuntimeManager {
 
     // Try cache first
     if let Some(cached) = self.config.cache_manager.get::<Vec<String>>(cache_key)? {
+      use colored::*;
+      eprintln!("{}", "   (using cached data)".bright_black());
       return Ok(cached);
     }
 
     // Fetch from network
+    use colored::*;
+    eprintln!("{}", "   (fetching from network...)".bright_black());
     let versions = match self.fetch_node_versions().await {
       Ok(v) => v,
       Err(e) => {
         // Try stale cache on network failure
-        if let Some(stale) = self.config.cache_manager.get_stale::<Vec<String>>(cache_key)? {
-          eprintln!("Warning: using stale cache due to network error: {}", e);
+        if let Some(stale) = self
+          .config
+          .cache_manager
+          .get_stale::<Vec<String>>(cache_key)?
+        {
+          eprintln!(
+            "{} {}",
+            "⚠".yellow(),
+            "Using stale cache due to network error".yellow()
+          );
           return Ok(stale);
         }
         return Err(e);
@@ -979,14 +1285,11 @@ impl RuntimeManager {
   }
 
   async fn fetch_node_versions(&self) -> Result<Vec<String>> {
-    let client = Client::builder()
-      .user_agent("realm")
-      .build()
-      .map_err(|e| {
-        RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
-          "Failed to create HTTP client: {e}"
-        )))
-      })?;
+    let client = Client::builder().user_agent("realm").build().map_err(|e| {
+      RealmError::RuntimeError(RuntimeError::DownloadFailed(format!(
+        "Failed to create HTTP client: {e}"
+      )))
+    })?;
 
     let url = "https://nodejs.org/dist/index.json";
     let response = client.get(url).send().await.map_err(|e| {

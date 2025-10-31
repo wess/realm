@@ -1,6 +1,6 @@
 use crate::config::RealmConfig;
-use crate::runtime::types::Runtime;
 use crate::runtime::manager::RuntimeManager;
+use crate::runtime::types::Runtime;
 use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -221,119 +221,128 @@ echo "Run 'deactivate' to exit the realm environment"
     self.path.join("config")
   }
 
-  pub fn setup_python_isolation(&self, runtime: &Runtime, runtime_manager: &RuntimeManager) -> Result<()> {
-    match runtime {
-      Runtime::Python(version) => {
-        let python_version_parts: Vec<&str> = version.split('.').collect();
-        let python_minor_version = if python_version_parts.len() >= 2 {
-          format!("{}.{}", python_version_parts[0], python_version_parts[1])
-        } else {
-          "3.12".to_string()
-        };
+  pub fn setup_python_isolation(
+    &self,
+    runtime: &Runtime,
+    runtime_manager: &RuntimeManager,
+  ) -> Result<()> {
+    if let Runtime::Python(version) = runtime {
+      let python_version_parts: Vec<&str> = version.split('.').collect();
+      let python_minor_version = if python_version_parts.len() >= 2 {
+        format!("{}.{}", python_version_parts[0], python_version_parts[1])
+      } else {
+        "3.12".to_string()
+      };
 
-        // Create per-project site-packages directory
-        let site_packages_dir = self.path
-          .join("lib")
-          .join(format!("python{}", python_minor_version))
-          .join("site-packages");
-        fs::create_dir_all(&site_packages_dir)
-          .context("Failed to create site-packages directory")?;
+      // Create per-project site-packages directory
+      let site_packages_dir = self
+        .path
+        .join("lib")
+        .join(format!("python{}", python_minor_version))
+        .join("site-packages");
+      fs::create_dir_all(&site_packages_dir).context("Failed to create site-packages directory")?;
 
-        // Create symlink to shared Python binary
-        let shared_python = runtime_manager.get_runtime_path(runtime);
-        if !shared_python.exists() {
-          return Err(anyhow!(
-            "Python binary not found at {}. Installation may have failed.",
-            shared_python.display()
-          ));
+      // Create symlink to shared Python binary
+      let shared_python = runtime_manager.get_runtime_path(runtime);
+      if !shared_python.exists() {
+        return Err(anyhow!(
+          "Python binary not found at {}. Installation may have failed.",
+          shared_python.display()
+        ));
+      }
+
+      let local_python = self.path.join("bin").join("python");
+      let local_python3 = self.path.join("bin").join("python3");
+
+      #[cfg(unix)]
+      {
+        use std::os::unix::fs::symlink;
+        if !local_python3.exists() {
+          symlink(&shared_python, &local_python3)
+            .with_context(|| format!("Failed to create python3 symlink from {} to {}. You may need appropriate permissions.", shared_python.display(), local_python3.display()))?;
         }
+        if !local_python.exists() {
+          symlink(&shared_python, &local_python).with_context(|| {
+            format!(
+              "Failed to create python symlink from {} to {}",
+              shared_python.display(),
+              local_python.display()
+            )
+          })?;
+        }
+      }
 
-        let local_python = self.path.join("bin").join("python");
-        let local_python3 = self.path.join("bin").join("python3");
+      #[cfg(windows)]
+      {
+        use std::os::windows::fs::symlink_file;
+        if !local_python3.exists() {
+          symlink_file(&shared_python, local_python3.with_extension("exe")).context(
+            "Failed to create python3 symlink. You may need administrator privileges on Windows.",
+          )?;
+        }
+        if !local_python.exists() {
+          symlink_file(&shared_python, local_python.with_extension("exe")).context(
+            "Failed to create python symlink. You may need administrator privileges on Windows.",
+          )?;
+        }
+      }
+
+      // Create pyvenv.cfg pointing to shared Python
+      let pyvenv_cfg = format!(
+        "home = {}\ninclude-system-site-packages = false\nversion = {}\n",
+        runtime_manager
+          .get_runtime_versions_dir(runtime)
+          .join(version)
+          .display(),
+        version
+      );
+
+      fs::write(self.path.join("pyvenv.cfg"), pyvenv_cfg).context("Failed to write pyvenv.cfg")?;
+
+      // Create symlink to pip if it exists
+      if let Some(pip_path) = runtime_manager.get_pip_path(runtime) {
+        let local_pip = self.path.join("bin").join("pip");
+        let local_pip3 = self.path.join("bin").join("pip3");
 
         #[cfg(unix)]
         {
           use std::os::unix::fs::symlink;
-          if !local_python3.exists() {
-            symlink(&shared_python, &local_python3)
-              .with_context(|| format!("Failed to create python3 symlink from {} to {}. You may need appropriate permissions.", shared_python.display(), local_python3.display()))?;
+          if !local_pip3.exists() {
+            if let Err(e) = symlink(&pip_path, &local_pip3) {
+              eprintln!("Warning: Failed to create pip3 symlink: {}", e);
+            }
           }
-          if !local_python.exists() {
-            symlink(&shared_python, &local_python)
-              .with_context(|| format!("Failed to create python symlink from {} to {}", shared_python.display(), local_python.display()))?;
+          if !local_pip.exists() {
+            if let Err(e) = symlink(&pip_path, &local_pip) {
+              eprintln!("Warning: Failed to create pip symlink: {}", e);
+            }
           }
         }
 
         #[cfg(windows)]
         {
           use std::os::windows::fs::symlink_file;
-          if !local_python3.exists() {
-            symlink_file(&shared_python, local_python3.with_extension("exe"))
-              .context("Failed to create python3 symlink. You may need administrator privileges on Windows.")?;
+          if !local_pip3.exists() {
+            if let Err(e) = symlink_file(&pip_path, local_pip3.with_extension("exe")) {
+              eprintln!("Warning: Failed to create pip3 symlink: {}", e);
+            }
           }
-          if !local_python.exists() {
-            symlink_file(&shared_python, local_python.with_extension("exe"))
-              .context("Failed to create python symlink. You may need administrator privileges on Windows.")?;
+          if !local_pip.exists() {
+            if let Err(e) = symlink_file(&pip_path, local_pip.with_extension("exe")) {
+              eprintln!("Warning: Failed to create pip symlink: {}", e);
+            }
           }
         }
-
-        // Create pyvenv.cfg pointing to shared Python
-        let pyvenv_cfg = format!(
-          "home = {}\ninclude-system-site-packages = false\nversion = {}\n",
-          runtime_manager
-            .get_runtime_versions_dir(runtime)
-            .join(version)
-            .display(),
-          version
+      } else {
+        eprintln!(
+          "Warning: pip not found in Python installation. You may need to install it manually."
         );
-
-        fs::write(self.path.join("pyvenv.cfg"), pyvenv_cfg)
-          .context("Failed to write pyvenv.cfg")?;
-
-        // Create symlink to pip if it exists
-        if let Some(pip_path) = runtime_manager.get_pip_path(runtime) {
-          let local_pip = self.path.join("bin").join("pip");
-          let local_pip3 = self.path.join("bin").join("pip3");
-
-          #[cfg(unix)]
-          {
-            use std::os::unix::fs::symlink;
-            if !local_pip3.exists() {
-              if let Err(e) = symlink(&pip_path, &local_pip3) {
-                eprintln!("Warning: Failed to create pip3 symlink: {}", e);
-              }
-            }
-            if !local_pip.exists() {
-              if let Err(e) = symlink(&pip_path, &local_pip) {
-                eprintln!("Warning: Failed to create pip symlink: {}", e);
-              }
-            }
-          }
-
-          #[cfg(windows)]
-          {
-            use std::os::windows::fs::symlink_file;
-            if !local_pip3.exists() {
-              if let Err(e) = symlink_file(&pip_path, local_pip3.with_extension("exe")) {
-                eprintln!("Warning: Failed to create pip3 symlink: {}", e);
-              }
-            }
-            if !local_pip.exists() {
-              if let Err(e) = symlink_file(&pip_path, local_pip.with_extension("exe")) {
-                eprintln!("Warning: Failed to create pip symlink: {}", e);
-              }
-            }
-          }
-        } else {
-          eprintln!("Warning: pip not found in Python installation. You may need to install it manually.");
-        }
-
-        println!("✨ Created per-project Python environment with isolated site-packages");
-
-        // Regenerate activation script to include VIRTUAL_ENV
-        self.generate_activation_script()?;
       }
-      _ => {}
+
+      println!("✨ Created per-project Python environment with isolated site-packages");
+
+      // Regenerate activation script to include VIRTUAL_ENV
+      self.generate_activation_script()?;
     }
     Ok(())
   }

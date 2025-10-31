@@ -1,0 +1,41 @@
+# Node.js Runtime Configuration
+# Built-in runtime for Realm
+
+runtime:
+  name: node
+  display_name: Node.js
+  aliases: [nodejs]
+  version_command: "--version"
+  description: JavaScript runtime built on Chrome's V8 engine
+  versions_url: "https://nodejs.org/dist/"
+
+versions:
+  type: api
+  url: "https://nodejs.org/dist/index.json"
+  json_path: "."
+
+downloads:
+  darwin-arm64:
+    url_template: "https://nodejs.org/dist/v{version}/node-v{version}-darwin-arm64.tar.gz"
+    format: tar.gz
+
+  darwin-x64:
+    url_template: "https://nodejs.org/dist/v{version}/node-v{version}-darwin-x64.tar.gz"
+    format: tar.gz
+
+  linux-x64:
+    url_template: "https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.gz"
+    format: tar.gz
+
+  linux-arm64:
+    url_template: "https://nodejs.org/dist/v{version}/node-v{version}-linux-arm64.tar.gz"
+    format: tar.gz
+
+install:
+  binary_path: bin/node
+  additional_binaries: [bin/npm, bin/npx]
+  strip_components: 1
+  post_install_commands: []
+
+environment:
+  requires_isolation: false

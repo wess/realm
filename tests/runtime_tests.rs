@@ -143,25 +143,47 @@ mod version_listing_tests {
     let runtime = Runtime::Python("latest".to_string());
 
     let result = manager.list_available_versions(&runtime).await;
-    assert!(result.is_ok(), "Failed to fetch Python versions: {:?}", result.err());
+    assert!(
+      result.is_ok(),
+      "Failed to fetch Python versions: {:?}",
+      result.err()
+    );
 
     let versions = result.unwrap();
-    assert!(!versions.is_empty(), "Should have at least one Python version");
+    assert!(
+      !versions.is_empty(),
+      "Should have at least one Python version"
+    );
 
     // Verify version format (should be like "3.12.6")
     for version in &versions {
       let parts: Vec<&str> = version.split('.').collect();
-      assert!(parts.len() >= 2, "Version should have at least major.minor: {}", version);
+      assert!(
+        parts.len() >= 2,
+        "Version should have at least major.minor: {}",
+        version
+      );
 
       // First part should be numeric
-      assert!(parts[0].parse::<u32>().is_ok(), "Major version should be numeric: {}", version);
-      assert!(parts[1].parse::<u32>().is_ok(), "Minor version should be numeric: {}", version);
+      assert!(
+        parts[0].parse::<u32>().is_ok(),
+        "Major version should be numeric: {}",
+        version
+      );
+      assert!(
+        parts[1].parse::<u32>().is_ok(),
+        "Minor version should be numeric: {}",
+        version
+      );
     }
 
     // Should include common Python versions
     let has_3_12 = versions.iter().any(|v| v.starts_with("3.12"));
     let has_3_11 = versions.iter().any(|v| v.starts_with("3.11"));
-    assert!(has_3_12 || has_3_11, "Should include Python 3.11 or 3.12 versions");
+    assert!(
+      has_3_12 || has_3_11,
+      "Should include Python 3.11 or 3.12 versions"
+    );
 
     println!("Found {} Python versions", versions.len());
     println!("Sample versions: {:?}", &versions[..versions.len().min(5)]);
@@ -174,7 +196,11 @@ mod version_listing_tests {
     let runtime = Runtime::Bun("latest".to_string());
 
     let result = manager.list_available_versions(&runtime).await;
-    assert!(result.is_ok(), "Failed to fetch Bun versions: {:?}", result.err());
+    assert!(
+      result.is_ok(),
+      "Failed to fetch Bun versions: {:?}",
+      result.err()
+    );
 
     let versions = result.unwrap();
     assert!(!versions.is_empty(), "Should have at least one Bun version");
@@ -182,10 +208,22 @@ mod version_listing_tests {
     // Verify version format (should be like "1.0.1")
     for version in &versions {
       let parts: Vec<&str> = version.split('.').collect();
-      assert!(parts.len() >= 2, "Version should have at least major.minor: {}", version);
+      assert!(
+        parts.len() >= 2,
+        "Version should have at least major.minor: {}",
+        version
+      );
 
-      assert!(parts[0].parse::<u32>().is_ok(), "Major version should be numeric: {}", version);
-      assert!(parts[1].parse::<u32>().is_ok(), "Minor version should be numeric: {}", version);
+      assert!(
+        parts[0].parse::<u32>().is_ok(),
+        "Major version should be numeric: {}",
+        version
+      );
+      assert!(
+        parts[1].parse::<u32>().is_ok(),
+        "Minor version should be numeric: {}",
+        version
+      );
     }
 
     // All Bun versions should start with "1."
@@ -203,23 +241,44 @@ mod version_listing_tests {
     let runtime = Runtime::Node("latest".to_string());
 
     let result = manager.list_available_versions(&runtime).await;
-    assert!(result.is_ok(), "Failed to fetch Node versions: {:?}", result.err());
+    assert!(
+      result.is_ok(),
+      "Failed to fetch Node versions: {:?}",
+      result.err()
+    );
 
     let versions = result.unwrap();
-    assert!(!versions.is_empty(), "Should have at least one Node version");
+    assert!(
+      !versions.is_empty(),
+      "Should have at least one Node version"
+    );
 
     // Verify version format (should be like "20.5.0")
     for version in &versions {
       let parts: Vec<&str> = version.split('.').collect();
-      assert!(parts.len() >= 2, "Version should have at least major.minor: {}", version);
+      assert!(
+        parts.len() >= 2,
+        "Version should have at least major.minor: {}",
+        version
+      );
 
-      assert!(parts[0].parse::<u32>().is_ok(), "Major version should be numeric: {}", version);
-      assert!(parts[1].parse::<u32>().is_ok(), "Minor version should be numeric: {}", version);
+      assert!(
+        parts[0].parse::<u32>().is_ok(),
+        "Major version should be numeric: {}",
+        version
+      );
+      assert!(
+        parts[1].parse::<u32>().is_ok(),
+        "Minor version should be numeric: {}",
+        version
+      );
     }
 
     // Should include current or recent versions (20+)
     let has_recent = versions.iter().any(|v| {
-      let major: u32 = v.split('.').next()
+      let major: u32 = v
+        .split('.')
+        .next()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
       major >= 20
@@ -237,11 +296,19 @@ mod version_listing_tests {
     let runtime = Runtime::Python("latest".to_string());
 
     let resolved = manager.resolve_latest_to_actual(&runtime).await;
-    assert!(resolved.is_ok(), "Failed to resolve latest Python version: {:?}", resolved.err());
+    assert!(
+      resolved.is_ok(),
+      "Failed to resolve latest Python version: {:?}",
+      resolved.err()
+    );
 
     let resolved_runtime = resolved.unwrap();
     assert_eq!(resolved_runtime.name(), "python");
-    assert_ne!(resolved_runtime.version(), "latest", "Should resolve to actual version");
+    assert_ne!(
+      resolved_runtime.version(),
+      "latest",
+      "Should resolve to actual version"
+    );
 
     // Should be a valid version number
     let version = resolved_runtime.version();
@@ -258,11 +325,19 @@ mod version_listing_tests {
     let runtime = Runtime::Bun("latest".to_string());
 
     let resolved = manager.resolve_latest_to_actual(&runtime).await;
-    assert!(resolved.is_ok(), "Failed to resolve latest Bun version: {:?}", resolved.err());
+    assert!(
+      resolved.is_ok(),
+      "Failed to resolve latest Bun version: {:?}",
+      resolved.err()
+    );
 
     let resolved_runtime = resolved.unwrap();
     assert_eq!(resolved_runtime.name(), "bun");
-    assert_ne!(resolved_runtime.version(), "latest", "Should resolve to actual version");
+    assert_ne!(
+      resolved_runtime.version(),
+      "latest",
+      "Should resolve to actual version"
+    );
 
     let version = resolved_runtime.version();
     let parts: Vec<&str> = version.split('.').collect();
@@ -278,11 +353,19 @@ mod version_listing_tests {
     let runtime = Runtime::Node("latest".to_string());
 
     let resolved = manager.resolve_latest_to_actual(&runtime).await;
-    assert!(resolved.is_ok(), "Failed to resolve latest Node version: {:?}", resolved.err());
+    assert!(
+      resolved.is_ok(),
+      "Failed to resolve latest Node version: {:?}",
+      resolved.err()
+    );
 
     let resolved_runtime = resolved.unwrap();
     assert_eq!(resolved_runtime.name(), "node");
-    assert_ne!(resolved_runtime.version(), "latest", "Should resolve to actual version");
+    assert_ne!(
+      resolved_runtime.version(),
+      "latest",
+      "Should resolve to actual version"
+    );
 
     let version = resolved_runtime.version();
     let parts: Vec<&str> = version.split('.').collect();
@@ -300,7 +383,11 @@ mod version_listing_tests {
     assert!(resolved.is_ok());
 
     let resolved_runtime = resolved.unwrap();
-    assert_eq!(resolved_runtime.version(), "18.0.0", "Non-latest version should not change");
+    assert_eq!(
+      resolved_runtime.version(),
+      "18.0.0",
+      "Non-latest version should not change"
+    );
   }
 }
 
@@ -315,7 +402,7 @@ mod url_validation_tests {
 
     let result = validate_download_url(
       "https://github.com/oven-sh/bun/releases/download/bun-v1.0.1/bun-darwin-x64.zip",
-      &allowed_hosts
+      &allowed_hosts,
     );
     assert!(result.is_ok());
   }
@@ -324,10 +411,7 @@ mod url_validation_tests {
   fn test_validate_download_url_http_rejected() {
     let allowed_hosts = vec!["github.com".to_string()];
 
-    let result = validate_download_url(
-      "http://github.com/malicious/file.zip",
-      &allowed_hosts
-    );
+    let result = validate_download_url("http://github.com/malicious/file.zip", &allowed_hosts);
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("HTTPS"));
   }
@@ -336,10 +420,7 @@ mod url_validation_tests {
   fn test_validate_download_url_unauthorized_host() {
     let allowed_hosts = vec!["github.com".to_string()];
 
-    let result = validate_download_url(
-      "https://evil.com/malware.zip",
-      &allowed_hosts
-    );
+    let result = validate_download_url("https://evil.com/malware.zip", &allowed_hosts);
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("not allowed"));
   }
@@ -350,7 +431,7 @@ mod url_validation_tests {
 
     let result = validate_download_url(
       "https://api.github.com/repos/oven-sh/bun/releases/latest",
-      &allowed_hosts
+      &allowed_hosts,
     );
     assert!(result.is_ok());
   }
@@ -372,15 +453,26 @@ mod platform_tests {
   #[test]
   fn test_get_platform_info() {
     let result = get_platform_info();
-    assert!(result.is_ok(), "Should get platform info on supported platforms");
+    assert!(
+      result.is_ok(),
+      "Should get platform info on supported platforms"
+    );
 
     let (os, arch) = result.unwrap();
 
     // OS should be darwin or linux
-    assert!(os == "darwin" || os == "linux", "OS should be darwin or linux, got: {}", os);
+    assert!(
+      os == "darwin" || os == "linux",
+      "OS should be darwin or linux, got: {}",
+      os
+    );
 
     // Arch should be x64 or arm64
-    assert!(arch == "x64" || arch == "arm64", "Arch should be x64 or arm64, got: {}", arch);
+    assert!(
+      arch == "x64" || arch == "arm64",
+      "Arch should be x64 or arm64, got: {}",
+      arch
+    );
 
     println!("Platform: {}-{}", os, arch);
   }

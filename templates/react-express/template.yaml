@@ -1,0 +1,12 @@
+name: react-express
+description: React frontend with Express backend
+variables:
+  - name: project_name
+    prompt: "Project name"
+    default: "{{directory_name}}"
+  - name: author
+    prompt: "Author"
+    default: ""
+  - name: description
+    prompt: "Description"
+    default: "A React and Express application"

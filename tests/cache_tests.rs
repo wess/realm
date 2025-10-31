@@ -75,11 +75,17 @@ fn test_cache_get_stale() {
 
   // get() should return None
   let expired: Option<Vec<String>> = manager.get("stale_data_test").unwrap();
-  assert!(expired.is_none(), "get() should return None for expired data");
+  assert!(
+    expired.is_none(),
+    "get() should return None for expired data"
+  );
 
   // get_stale() should still return data
   let stale: Option<Vec<String>> = manager.get_stale("stale_data_test").unwrap();
-  assert!(stale.is_some(), "get_stale() should return expired data, but got None");
+  assert!(
+    stale.is_some(),
+    "get_stale() should return expired data, but got None"
+  );
   assert_eq!(stale.unwrap(), test_data);
 
   let _ = manager.clear("stale_data_test");
@@ -115,9 +121,9 @@ fn test_cache_clear_all() {
   let key3 = "clear_all_item3";
 
   // Set multiple cache entries
-  manager.set(key1, &vec!["a".to_string()]).unwrap();
-  manager.set(key2, &vec!["b".to_string()]).unwrap();
-  manager.set(key3, &vec!["c".to_string()]).unwrap();
+  manager.set(key1, vec!["a".to_string()]).unwrap();
+  manager.set(key2, vec!["b".to_string()]).unwrap();
+  manager.set(key3, vec!["c".to_string()]).unwrap();
 
   // Verify they exist
   assert!(manager.get::<Vec<String>>(key1).unwrap().is_some());

@@ -1,0 +1,11 @@
+{
+  "name": "express-backend",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "cors": "^2.8.5"
+  }
+}

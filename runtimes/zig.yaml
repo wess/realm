@@ -1,0 +1,41 @@
+# Zig Runtime Configuration
+# Zig is a general-purpose programming language and toolchain
+
+runtime:
+  name: zig
+  display_name: Zig
+  aliases: []
+  version_command: version
+  description: General-purpose programming language and toolchain for maintaining robust, optimal, and reusable software
+  versions_url: "https://github.com/ziglang/zig/releases"
+
+versions:
+  type: github
+  repo: ziglang/zig
+  tag_pattern: "^(.+)$"
+
+downloads:
+  darwin-arm64:
+    url_template: "https://ziglang.org/download/{version}/zig-macos-aarch64-{version}.tar.xz"
+    format: tar.gz
+
+  darwin-x64:
+    url_template: "https://ziglang.org/download/{version}/zig-macos-x86_64-{version}.tar.xz"
+    format: tar.gz
+
+  linux-x64:
+    url_template: "https://ziglang.org/download/{version}/zig-linux-x86_64-{version}.tar.xz"
+    format: tar.gz
+
+  linux-arm64:
+    url_template: "https://ziglang.org/download/{version}/zig-linux-aarch64-{version}.tar.xz"
+    format: tar.gz
+
+install:
+  binary_path: zig
+  additional_binaries: []
+  strip_components: 1
+  post_install_commands: []
+
+environment:
+  requires_isolation: false

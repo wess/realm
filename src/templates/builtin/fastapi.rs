@@ -55,7 +55,7 @@ export default defineConfig({
       content: r#"fastapi==0.109.0
 uvicorn[standard]==0.27.0
 "#
-        .to_string(),
+      .to_string(),
       executable: false,
     },
     TemplateFile {

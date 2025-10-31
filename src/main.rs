@@ -6,7 +6,7 @@ use std::process;
 async fn main() {
   let cli = Cli::parse();
 
-  let handler = match CliHandler::new() {
+  let handler = match CliHandler::new().await {
     Ok(handler) => handler,
     Err(e) => {
       eprintln!("Failed to initialize realm: {e}");

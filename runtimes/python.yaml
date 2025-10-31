@@ -1,0 +1,42 @@
+# Python Runtime Configuration
+# Built-in runtime for Realm
+# Uses python-build-standalone for reliable cross-platform support
+
+runtime:
+  name: python
+  display_name: Python
+  aliases: [py, python3]
+  version_command: "--version"
+  description: High-level programming language
+  versions_url: "https://github.com/indygreg/python-build-standalone/releases"
+
+versions:
+  type: github
+  repo: indygreg/python-build-standalone
+  tag_pattern: "^([0-9]+)$"
+
+downloads:
+  darwin-arm64:
+    url_template: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-{version}+20241016-aarch64-unknown-apple-darwin-install_only.tar.gz"
+    format: tar.gz
+
+  darwin-x64:
+    url_template: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-{version}+20241016-x86_64-unknown-apple-darwin-install_only.tar.gz"
+    format: tar.gz
+
+  linux-x64:
+    url_template: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-{version}+20241016-x86_64-unknown-linux-gnu-install_only.tar.gz"
+    format: tar.gz
+
+  linux-arm64:
+    url_template: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-{version}+20241016-aarch64-unknown-linux-gnu-install_only.tar.gz"
+    format: tar.gz
+
+install:
+  binary_path: python/bin/python3
+  additional_binaries: [python/bin/python, python/bin/pip3, python/bin/pip]
+  strip_components: 0
+  post_install_commands: []
+
+environment:
+  requires_isolation: true

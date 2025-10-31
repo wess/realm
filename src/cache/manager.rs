@@ -1,4 +1,4 @@
-use crate::errors::{RealmError, RuntimeError, Result};
+use crate::errors::{RealmError, Result, RuntimeError};
 use dirs::home_dir;
 use serde::{Deserialize, Serialize};
 use std::fs;

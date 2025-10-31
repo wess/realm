@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-01-31
+
+### Added
+- **Template variables** - Templates can now define custom variables in `template.yaml`
+- Interactive prompts for template variables when not provided via CLI
+- `--var KEY=VALUE` flag support for passing template variables
+- Variable substitution in template files using Tera syntax
+- `{{directory_name}}` placeholder for sensible defaults
+- Comprehensive template variable documentation
+
+### Changed
+- All built-in templates now include `template.yaml` manifests with standard variables
+- Template initialization supports both CLI flags and interactive prompts
+- Skip prompts mode (`--yes`) uses template variable defaults
+
 ## [1.0.0] - 2025-01-22
 
 ### Added
@@ -62,7 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proper secret handling in deployment artifacts
 - Secure environment variable isolation
 
-[Unreleased]: https://github.com/wess/realm/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/wess/realm/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/wess/realm/compare/v1.0.0...v1.2.0
 [1.0.0]: https://github.com/wess/realm/releases/tag/v1.0.0
 [0.1.5]: https://github.com/wess/realm/releases/tag/v0.1.5
 [0.1.0]: https://github.com/wess/realm/releases/tag/v0.1.0

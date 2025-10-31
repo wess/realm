@@ -50,10 +50,30 @@ This will download and install realm to `/usr/local/bin`.
 
 ## Quick Start
 
-### JavaScript Stack (Bun/Node)
+### Interactive Mode (Recommended for New Users)
 ```bash
-# Create a new full-stack project
-realm init myapp --template=react-express --runtime=bun
+# Just run init without flags - Realm will guide you!
+realm init
+
+# Follow the prompts:
+# → Project name: myapp
+# → Select runtime: Bun (latest)
+# → Use a template?: React + Express
+# → Done!
+
+cd myapp
+source .venv/bin/activate
+realm start
+# Visit http://localhost:8000 - it just works!
+```
+
+### Command-Line Mode (For Scripts/CI)
+```bash
+# Create a new full-stack project with flags
+realm init myapp --runtime=bun --template=react-express
+
+# Or use defaults quickly
+realm init -y
 
 # Activate the environment
 cd myapp
@@ -61,7 +81,6 @@ source .venv/bin/activate
 
 # Start everything (processes + proxy)
 realm start
-# Visit http://localhost:8000 - it just works!
 ```
 
 ### Python Stack (FastAPI)
@@ -84,12 +103,25 @@ realm start
 ## Core Workflow
 
 ### 1. Initialize Environment
+
+**Interactive Mode** (prompts you for choices):
 ```bash
-# Create with specific runtime and template
+realm init
+# → Asks for project name
+# → Asks which runtime (Bun/Node/Python)
+# → Asks which template (or none)
+```
+
+**Command-Line Mode** (for automation):
+```bash
+# With specific options
 realm init .venv --runtime=node@20 --template=vue-express
 
-# Or just create empty environment
-realm init .venv
+# Quick defaults (skips prompts)
+realm init -y
+
+# Empty environment
+realm init .venv --runtime=bun
 ```
 
 ### 2. Activate Environment
@@ -100,7 +132,7 @@ source .venv/bin/activate
 
 ### 3. List Available Versions
 ```bash
-# List available Python versions
+# List available Python versions (shows cache status)
 realm list --runtime=python
 
 # List available Node versions
@@ -111,6 +143,18 @@ realm list --runtime=bun
 
 # Clear cached version lists (24hr cache)
 realm cache clear
+```
+
+### Generate Shell Completions
+```bash
+# Bash
+realm completions bash > /etc/bash_completion.d/realm
+
+# Zsh
+realm completions zsh > ~/.zfunc/_realm
+
+# Fish
+realm completions fish > ~/.config/fish/completions/realm.fish
 ```
 
 ### 4. Start Development
@@ -176,8 +220,44 @@ realm templates list
 # Create project from template
 realm init myapp --template=svelte-fastify
 
+# Provide template variables via CLI
+realm init myapp --template=react-express --var project_name=myapp --var author="John Doe"
+
+# Interactive prompts for template variables (if not provided)
+realm init --template=vue-express
+# Will prompt: > Project name? (myapp)
+#             > Author? ()
+#             > Description? (A Vue.js and Express application)
+
 # Create your own template
 realm create --template=my-stack
+```
+
+#### Template Variables
+
+Templates can define custom variables in a `template.yaml` manifest:
+
+```yaml
+name: my-template
+description: My custom template
+variables:
+  - name: project_name
+    prompt: "Project name"
+    default: "{{directory_name}}"
+  - name: author
+    prompt: "Author"
+    default: ""
+  - name: api_port
+    prompt: "API port"
+    default: "3001"
+```
+
+Variables are available in template files using Tera syntax:
+```json
+{
+  "name": "{{project_name}}-frontend",
+  "author": "{{author}}"
+}
 ```
 
 ## Runtime Management
@@ -197,6 +277,24 @@ realm init .venv --runtime=bun@1.0.1
 # Use Python with per-project isolation
 realm init .venv --runtime=python@3.12
 ```
+
+### Custom Runtimes
+
+Add any runtime via YAML configuration. Browse [community runtimes](runtimes/):
+
+```bash
+# Use Deno
+curl -o ~/.realm/runtimes-config/deno.yaml \
+  https://raw.githubusercontent.com/wess/realm/main/runtimes/deno.yaml
+realm init --runtime=deno
+
+# Use Go
+curl -o ~/.realm/runtimes-config/go.yaml \
+  https://raw.githubusercontent.com/wess/realm/main/runtimes/go.yaml
+realm init --runtime=go
+```
+
+See [docs/custom-runtimes.md](docs/custom-runtimes.md) for creating your own.
 
 **Python Support:**
 - Downloads and manages Python from python-build-standalone

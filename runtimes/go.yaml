@@ -1,0 +1,57 @@
+# Go Runtime Configuration
+# Place this file in ~/.realm/runtimes-config/go.yaml to enable Go support
+
+runtime:
+  name: go
+  display_name: Go
+  aliases:
+    - golang
+  version_command: version
+  description: The Go programming language
+  versions_url: "https://go.dev/dl/?mode=json"
+
+versions:
+  type: api
+  url: "https://go.dev/dl/?mode=json"
+  json_path: version
+
+downloads:
+  darwin-arm64:
+    url_template: "https://go.dev/dl/go{version}.darwin-arm64.tar.gz"
+    format: tar.gz
+    checksum_url: "https://go.dev/dl/go{version}.darwin-arm64.tar.gz.sha256"
+    checksum_algo: sha256
+    os_map:
+      darwin: darwin
+    arch_map:
+      arm64: arm64
+
+  darwin-x64:
+    url_template: "https://go.dev/dl/go{version}.darwin-amd64.tar.gz"
+    format: tar.gz
+    checksum_url: "https://go.dev/dl/go{version}.darwin-amd64.tar.gz.sha256"
+    checksum_algo: sha256
+
+  linux-x64:
+    url_template: "https://go.dev/dl/go{version}.linux-amd64.tar.gz"
+    format: tar.gz
+    checksum_url: "https://go.dev/dl/go{version}.linux-amd64.tar.gz.sha256"
+    checksum_algo: sha256
+
+  linux-arm64:
+    url_template: "https://go.dev/dl/go{version}.linux-arm64.tar.gz"
+    format: tar.gz
+    checksum_url: "https://go.dev/dl/go{version}.linux-arm64.tar.gz.sha256"
+    checksum_algo: sha256
+
+install:
+  binary_path: go/bin/go
+  additional_binaries:
+    - gofmt
+  strip_components: 0
+  post_install_commands: []
+
+environment:
+  requires_isolation: false
+  vars:
+    GOROOT: "{install_dir}/go"

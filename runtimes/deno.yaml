@@ -1,0 +1,41 @@
+# Deno Runtime Configuration
+# Place this file in ~/.realm/runtimes-config/deno.yaml to enable Deno support
+
+runtime:
+  name: deno
+  display_name: Deno
+  aliases: []
+  version_command: "--version"
+  description: A secure runtime for JavaScript and TypeScript
+  versions_url: "https://github.com/denoland/deno/releases"
+
+versions:
+  type: github
+  repo: denoland/deno
+  tag_pattern: "^v(.+)$"
+
+downloads:
+  darwin-arm64:
+    url_template: "https://github.com/denoland/deno/releases/download/v{version}/deno-aarch64-apple-darwin.zip"
+    format: zip
+
+  darwin-x64:
+    url_template: "https://github.com/denoland/deno/releases/download/v{version}/deno-x86_64-apple-darwin.zip"
+    format: zip
+
+  linux-x64:
+    url_template: "https://github.com/denoland/deno/releases/download/v{version}/deno-x86_64-unknown-linux-gnu.zip"
+    format: zip
+
+  linux-arm64:
+    url_template: "https://github.com/denoland/deno/releases/download/v{version}/deno-aarch64-unknown-linux-gnu.zip"
+    format: zip
+
+install:
+  binary_path: deno
+  additional_binaries: []
+  strip_components: 0
+  post_install_commands: []
+
+environment:
+  requires_isolation: false

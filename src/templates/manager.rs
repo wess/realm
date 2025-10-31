@@ -1,25 +1,29 @@
-use super::builtin::{fastapi, nextjs, react, svelte, vue};
-use super::template::{Template, TemplateFile};
-use crate::config::RealmConfig;
 use anyhow::{anyhow, Context, Result};
 use dirs::home_dir;
+use include_dir::{include_dir, Dir};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tera::{Context as TeraContext, Tera};
+
+use super::manifest::TemplateManifest;
+
+static BUILTIN_TEMPLATES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates");
 
 pub struct TemplateManager {
-  templates_dir: PathBuf,
+  user_templates_dir: PathBuf,
 }
 
 impl TemplateManager {
   pub fn new() -> Result<Self> {
     let home = home_dir().ok_or_else(|| anyhow!("Could not find home directory"))?;
-    let templates_dir = home.join(".realm").join("templates");
+    let user_templates_dir = home.join(".realm").join("templates");
 
-    if !templates_dir.exists() {
-      fs::create_dir_all(&templates_dir).context("Failed to create templates directory")?;
+    if !user_templates_dir.exists() {
+      fs::create_dir_all(&user_templates_dir).context("Failed to create templates directory")?;
     }
 
-    Ok(Self { templates_dir })
+    Ok(Self { user_templates_dir })
   }
 
   pub fn create_template_from_current_dir(&self, name: &str) -> Result<()> {
@@ -33,28 +37,17 @@ impl TemplateManager {
       ));
     }
 
-    let realm_config = RealmConfig::load(&realm_yml_path)?;
+    // Save template to user templates directory
+    let template_dir = self.user_templates_dir.join(name);
 
-    // Collect all files in current directory (excluding common ignore patterns)
-    let mut files = Vec::new();
-    self.collect_template_files(&current_dir, &current_dir, &mut files)?;
+    if template_dir.exists() {
+      return Err(anyhow!("Template '{}' already exists", name));
+    }
 
-    let template = Template {
-      name: name.to_string(),
-      description: format!("Template created from {}", current_dir.display()),
-      version: "1.0.1".to_string(),
-      files,
-      realm_config,
-      variables: std::collections::HashMap::new(),
-    };
-
-    // Save template
-    let template_dir = self.templates_dir.join(name);
     fs::create_dir_all(&template_dir)?;
 
-    let template_file = template_dir.join("template.yml");
-    let template_content = serde_yaml::to_string(&template)?;
-    fs::write(template_file, template_content)?;
+    // Copy current directory to template directory (excluding common patterns)
+    self.copy_dir_filtered(&current_dir, &template_dir)?;
 
     println!("Template '{name}' created successfully");
     println!("Template saved to: {}", template_dir.display());
@@ -62,155 +55,318 @@ impl TemplateManager {
     Ok(())
   }
 
-  pub fn init_from_template(&self, template_name: &str, target_dir: &Path) -> Result<()> {
-    let template = self.load_template(template_name)?;
+  #[allow(clippy::only_used_in_recursion)]
+  fn copy_dir_filtered(&self, source: &Path, dest: &Path) -> Result<()> {
+    for entry in fs::read_dir(source)? {
+      let entry = entry?;
+      let source_path = entry.path();
 
+      // Skip common ignore patterns
+      if let Some(name) = source_path.file_name().and_then(|n| n.to_str()) {
+        if name.starts_with('.') && name != ".env" && name != ".gitignore" {
+          continue;
+        }
+        if matches!(
+          name,
+          "node_modules" | "target" | "dist" | "build" | ".git" | ".venv"
+        ) {
+          continue;
+        }
+      }
+
+      let file_name = entry.file_name();
+      let dest_path = dest.join(&file_name);
+
+      if source_path.is_dir() {
+        fs::create_dir_all(&dest_path)?;
+        self.copy_dir_filtered(&source_path, &dest_path)?;
+      } else {
+        fs::copy(&source_path, &dest_path)?;
+      }
+    }
+
+    Ok(())
+  }
+
+  pub fn init_from_template(
+    &self,
+    template_name: &str,
+    target_dir: &Path,
+    provided_vars: HashMap<String, String>,
+    skip_prompts: bool,
+  ) -> Result<()> {
     if target_dir.exists() && target_dir.read_dir()?.next().is_some() {
       return Err(anyhow!("Target directory is not empty"));
     }
 
     fs::create_dir_all(target_dir)?;
 
-    // Create files from template
-    for file in &template.files {
-      let file_path = target_dir.join(&file.path);
+    // Load template manifest if it exists
+    let manifest = self.load_template_manifest(template_name);
 
-      if let Some(parent) = file_path.parent() {
-        fs::create_dir_all(parent)?;
-      }
+    // Collect all variables (provided + prompted + defaults)
+    let variables = if let Some(ref manifest) = manifest {
+      self.collect_template_variables(manifest, provided_vars, target_dir, skip_prompts)?
+    } else {
+      provided_vars
+    };
 
-      // Process template variables (simple string replacement)
-      let content = self.process_template_variables(&file.content, &template.variables);
-      fs::write(&file_path, content)?;
+    // Create template context
+    let context = self.create_template_context(target_dir, &variables)?;
 
-      // Set executable if needed
-      #[cfg(unix)]
-      if file.executable {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&file_path)?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&file_path, perms)?;
+    // Try built-in templates first
+    if let Some(template_dir) = BUILTIN_TEMPLATES.get_dir(template_name) {
+      self.copy_embedded_template(template_dir, target_dir, &context)?;
+    }
+    // Try user templates
+    else {
+      let user_template_path = self.user_templates_dir.join(template_name);
+      if user_template_path.exists() && user_template_path.is_dir() {
+        self.copy_filesystem_template(&user_template_path, target_dir, &context)?;
+      } else {
+        return Err(anyhow!("Template '{}' not found", template_name));
       }
     }
-
-    // Create realm.yml
-    let realm_yml_path = target_dir.join("realm.yml");
-    template.realm_config.save(&realm_yml_path)?;
 
     println!(
       "Project created from template '{}' in {}",
       template_name,
       target_dir.display()
     );
-    println!("Next steps:");
-    println!("  cd {}", target_dir.display());
-    println!("  realm init .venv");
-    println!("  source .venv/bin/activate");
-    println!("  realm start");
 
     Ok(())
+  }
+
+  fn load_template_manifest(&self, template_name: &str) -> Option<TemplateManifest> {
+    // Try built-in templates first
+    if let Some(template_dir) = BUILTIN_TEMPLATES.get_dir(template_name) {
+      if let Some(manifest_file) = template_dir.get_file("template.yaml") {
+        if let Some(content) = manifest_file.contents_utf8() {
+          return TemplateManifest::from_yaml_str(content).ok();
+        }
+      }
+      // Try .yml extension
+      if let Some(manifest_file) = template_dir.get_file("template.yml") {
+        if let Some(content) = manifest_file.contents_utf8() {
+          return TemplateManifest::from_yaml_str(content).ok();
+        }
+      }
+    }
+
+    // Try user templates
+    let user_template_path = self.user_templates_dir.join(template_name);
+    if user_template_path.exists() {
+      let yaml_path = user_template_path.join("template.yaml");
+      if yaml_path.exists() {
+        return TemplateManifest::from_file(&yaml_path).ok();
+      }
+      let yml_path = user_template_path.join("template.yml");
+      if yml_path.exists() {
+        return TemplateManifest::from_file(&yml_path).ok();
+      }
+    }
+
+    None
+  }
+
+  fn collect_template_variables(
+    &self,
+    manifest: &TemplateManifest,
+    mut provided_vars: HashMap<String, String>,
+    target_dir: &Path,
+    skip_prompts: bool,
+  ) -> Result<HashMap<String, String>> {
+    let mut variables = HashMap::new();
+
+    // Add project_name default
+    let project_name = target_dir
+      .file_name()
+      .and_then(|n| n.to_str())
+      .unwrap_or("project")
+      .to_string();
+
+    for var in &manifest.variables {
+      let value = if let Some(provided) = provided_vars.remove(&var.name) {
+        // Use provided value from CLI
+        provided
+      } else if skip_prompts {
+        // Use default if skipping prompts
+        self.resolve_default(&var.default, &project_name)
+      } else {
+        // Prompt user
+        use inquire::Text;
+        let default = self.resolve_default(&var.default, &project_name);
+        Text::new(&var.prompt)
+          .with_default(&default)
+          .prompt()
+          .map_err(|e| anyhow!("Prompt cancelled: {}", e))?
+      };
+
+      variables.insert(var.name.clone(), value);
+    }
+
+    Ok(variables)
+  }
+
+  fn resolve_default(&self, default: &str, project_name: &str) -> String {
+    default.replace("{{directory_name}}", project_name)
+  }
+
+  fn create_template_context(
+    &self,
+    target_dir: &Path,
+    variables: &HashMap<String, String>,
+  ) -> Result<TeraContext> {
+    let mut context = TeraContext::new();
+
+    // Add project_name if not in variables
+    if !variables.contains_key("project_name") {
+      let project_name = target_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("project");
+      context.insert("project_name", project_name);
+    }
+
+    // Add all variables to context
+    for (key, value) in variables {
+      context.insert(key, value);
+    }
+
+    // Add backwards compatibility defaults
+    if !variables.contains_key("author") {
+      context.insert("author", "");
+    }
+    if !variables.contains_key("description") {
+      context.insert("description", "");
+    }
+
+    Ok(context)
+  }
+
+  fn copy_embedded_template(
+    &self,
+    template_dir: &Dir,
+    target_dir: &Path,
+    context: &TeraContext,
+  ) -> Result<()> {
+    self.copy_embedded_dir_recursive(template_dir, target_dir, template_dir.path(), context)
+  }
+
+  fn copy_embedded_dir_recursive(
+    &self,
+    dir: &Dir,
+    target_base: &Path,
+    template_root: &std::path::Path,
+    context: &TeraContext,
+  ) -> Result<()> {
+    for entry in dir.entries() {
+      if let Some(file) = entry.as_file() {
+        let relative_path = file
+          .path()
+          .strip_prefix(template_root)
+          .unwrap_or(file.path());
+        let file_path = target_base.join(relative_path);
+
+        if let Some(parent) = file_path.parent() {
+          fs::create_dir_all(parent)?;
+        }
+
+        // Process file content with Tera if it's a text file
+        let content = self.process_template_content(file.contents(), context)?;
+        fs::write(&file_path, content)?;
+
+        // Preserve executable permissions if set
+        #[cfg(unix)]
+        {
+          use std::os::unix::fs::PermissionsExt;
+          if relative_path.to_string_lossy().starts_with("bin/") {
+            if let Ok(metadata) = fs::metadata(&file_path) {
+              let mut perms = metadata.permissions();
+              perms.set_mode(0o755);
+              let _ = fs::set_permissions(&file_path, perms);
+            }
+          }
+        }
+      } else if let Some(subdir) = entry.as_dir() {
+        self.copy_embedded_dir_recursive(subdir, target_base, template_root, context)?;
+      }
+    }
+
+    Ok(())
+  }
+
+  fn copy_filesystem_template(
+    &self,
+    template_dir: &Path,
+    target_dir: &Path,
+    context: &TeraContext,
+  ) -> Result<()> {
+    for entry in fs::read_dir(template_dir)? {
+      let entry = entry?;
+      let source_path = entry.path();
+      let file_name = entry.file_name();
+      let target_path = target_dir.join(&file_name);
+
+      if source_path.is_dir() {
+        fs::create_dir_all(&target_path)?;
+        self.copy_filesystem_template(&source_path, &target_path, context)?;
+      } else {
+        // Read file content and process with Tera
+        let content = fs::read(&source_path)?;
+        let processed_content = self.process_template_content(&content, context)?;
+        fs::write(&target_path, processed_content)?;
+      }
+    }
+
+    Ok(())
+  }
+
+  fn process_template_content(&self, content: &[u8], context: &TeraContext) -> Result<Vec<u8>> {
+    // Try to convert to UTF-8 string for template processing
+    if let Ok(text) = std::str::from_utf8(content) {
+      // Only process if it looks like it contains template variables
+      if text.contains("{{") || text.contains("{%") {
+        match Tera::one_off(text, context, false) {
+          Ok(rendered) => return Ok(rendered.into_bytes()),
+          Err(_) => {
+            // If template rendering fails, return original content
+            return Ok(content.to_vec());
+          }
+        }
+      }
+    }
+
+    // Return original content if not UTF-8 or no template variables
+    Ok(content.to_vec())
   }
 
   pub fn list_templates(&self) -> Result<Vec<String>> {
     let mut templates = Vec::new();
 
-    if !self.templates_dir.exists() {
-      return Ok(templates);
+    // Add built-in templates
+    for dir in BUILTIN_TEMPLATES.dirs() {
+      if let Some(name) = dir.path().file_name().and_then(|n| n.to_str()) {
+        templates.push(name.to_string());
+      }
     }
 
-    for entry in fs::read_dir(&self.templates_dir)? {
-      let entry = entry?;
-      if entry.file_type()?.is_dir() {
-        if let Some(name) = entry.file_name().to_str() {
-          templates.push(name.to_string());
+    // Add user templates
+    if self.user_templates_dir.exists() {
+      for entry in fs::read_dir(&self.user_templates_dir)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+          if let Some(name) = entry.file_name().to_str() {
+            if !templates.contains(&name.to_string()) {
+              templates.push(name.to_string());
+            }
+          }
         }
       }
     }
 
     templates.sort();
     Ok(templates)
-  }
-
-  fn load_template(&self, name: &str) -> Result<Template> {
-    let template_file = self.templates_dir.join(name).join("template.yml");
-
-    if !template_file.exists() {
-      return Err(anyhow!("Template '{}' not found", name));
-    }
-
-    let content = fs::read_to_string(template_file)?;
-    let template: Template = serde_yaml::from_str(&content)?;
-    Ok(template)
-  }
-
-  fn collect_template_files(
-    &self,
-    base_dir: &Path,
-    current_dir: &Path,
-    files: &mut Vec<TemplateFile>,
-  ) -> Result<()> {
-    for entry in fs::read_dir(current_dir)? {
-      let entry = entry?;
-      let path = entry.path();
-
-      // Skip common ignore patterns
-      if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-        if name.starts_with('.') && name != ".env" {
-          continue;
-        }
-        if matches!(name, "node_modules" | "target" | "dist" | "build" | ".git") {
-          continue;
-        }
-      }
-
-      let relative_path = path.strip_prefix(base_dir)?.to_string_lossy().to_string();
-
-      if path.is_file() {
-        let content = fs::read_to_string(&path)?;
-        let executable = self.is_executable(&path)?;
-
-        files.push(TemplateFile {
-          path: relative_path,
-          content,
-          executable,
-        });
-      } else if path.is_dir() {
-        self.collect_template_files(base_dir, &path, files)?;
-      }
-    }
-
-    Ok(())
-  }
-
-  fn is_executable(&self, path: &Path) -> Result<bool> {
-    #[cfg(unix)]
-    {
-      use std::os::unix::fs::PermissionsExt;
-      let metadata = fs::metadata(path)?;
-      Ok(metadata.permissions().mode() & 0o111 != 0)
-    }
-    #[cfg(not(unix))]
-    {
-      Ok(false)
-    }
-  }
-
-  fn process_template_variables(
-    &self,
-    content: &str,
-    _variables: &std::collections::HashMap<String, String>,
-  ) -> String {
-    // Simple implementation - could be enhanced with proper templating
-    content.to_string()
-  }
-
-  pub fn create_builtin_templates(&self) -> Result<()> {
-    react::create_template(&self.templates_dir)?;
-    svelte::create_template(&self.templates_dir)?;
-    vue::create_template(&self.templates_dir)?;
-    nextjs::create_template(&self.templates_dir)?;
-    fastapi::create_template(&self.templates_dir)?;
-    Ok(())
   }
 }
 
