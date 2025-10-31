@@ -57,6 +57,17 @@ pub enum Commands {
     yes: bool,
   },
 
+  /// Mount an existing project and setup its environment
+  Mount {
+    /// Directory to mount (default: current directory)
+    #[arg(default_value = ".")]
+    path: PathBuf,
+
+    /// Skip interactive prompts and use defaults
+    #[arg(long, short = 'y')]
+    yes: bool,
+  },
+
   /// Start all processes and proxy server
   Start,
 
@@ -140,6 +151,7 @@ impl CliHandler {
         vars,
         yes,
       } => self.handle_init(path, runtime, template, vars, yes).await,
+      Commands::Mount { path, yes } => self.handle_mount(path, yes).await,
       Commands::Start => self.handle_start().await,
       Commands::Stop => self.handle_stop().await,
       Commands::Proxy => self.handle_proxy().await,
@@ -373,6 +385,178 @@ impl CliHandler {
     println!(
       "  {}",
       format!("source {}/bin/activate", path.display()).bright_cyan()
+    );
+    println!("  {}", "realm start".bright_cyan());
+
+    Ok(())
+  }
+
+  async fn handle_mount(&self, project_path: PathBuf, skip_prompts: bool) -> Result<()> {
+    use crate::mount::{copy_env_example, DependencyInstaller, ProjectDetector};
+
+    println!("{}", "🔍 Inspecting project...".cyan().bold());
+
+    let project_path = if project_path == PathBuf::from(".") {
+      std::env::current_dir()?
+    } else {
+      project_path
+    };
+
+    if !project_path.exists() {
+      return Err(RealmError::ValidationError(format!(
+        "Project path does not exist: {}",
+        project_path.display()
+      )));
+    }
+
+    let detector = ProjectDetector::new(project_path.clone());
+    let features = detector.detect()?;
+
+    if features.is_empty() {
+      println!("{}", "   No project features detected. Is this a realm project?".yellow());
+      return Ok(());
+    }
+
+    // Print detected features
+    for feature in &features {
+      let icon = match feature.feature_type {
+        crate::mount::FeatureType::RealmConfig => "📋",
+        crate::mount::FeatureType::PackageJson => "📦",
+        crate::mount::FeatureType::Requirements => "🐍",
+        crate::mount::FeatureType::EnvExample => "🔐",
+        crate::mount::FeatureType::DockerCompose => "🐳",
+        crate::mount::FeatureType::CargoToml => "🦀",
+        crate::mount::FeatureType::GoMod => "🐹",
+      };
+
+      let relative_path = feature
+        .path
+        .strip_prefix(&project_path)
+        .unwrap_or(&feature.path);
+      println!(
+        "   {} Found {} at {}",
+        icon,
+        feature.name.bright_white(),
+        relative_path.display()
+      );
+    }
+
+    println!();
+    println!("{}", "🚀 Setting up environment...".cyan().bold());
+
+    // Infer runtime
+    let runtime_spec = detector.infer_runtime(&features);
+    println!(
+      "   {} Detected runtime: {}",
+      "→".cyan(),
+      runtime_spec.bright_white()
+    );
+
+    // Parse runtime
+    let mut runtime = Runtime::parse(&runtime_spec)?;
+
+    // Check if we can use system-installed runtime
+    let use_system =
+      runtime.version() == "latest" && self.runtime_manager.is_available_on_system(&runtime);
+
+    if use_system {
+      println!(
+        "   {} Using system-installed {}",
+        "✓".green(),
+        runtime.name()
+      );
+    } else {
+      // Resolve "latest" to actual version if needed
+      if runtime.version() == "latest" {
+        runtime = self
+          .runtime_manager
+          .resolve_latest_to_actual(&runtime)
+          .await?;
+      }
+
+      // Install runtime if not already installed
+      if !self.runtime_manager.is_version_installed(&runtime) {
+        println!(
+          "   {} Installing {} {}...",
+          "→".cyan(),
+          runtime.name(),
+          runtime.version()
+        );
+        self.runtime_manager.install_version(&runtime).await?;
+      } else {
+        println!(
+          "   {} {} {} already installed",
+          "✓".green(),
+          runtime.name(),
+          runtime.version()
+        );
+      }
+    }
+
+    // Create realm environment
+    let venv_path = project_path.join(".venv");
+    if venv_path.exists() && !skip_prompts {
+      use inquire::Confirm;
+      let overwrite = Confirm::new("Realm environment already exists. Recreate it?")
+        .with_default(false)
+        .prompt()
+        .unwrap_or(false);
+
+      if !overwrite {
+        println!("   {} Using existing environment", "→".yellow());
+      } else {
+        println!("   {} Removing existing environment...", "→".cyan());
+        std::fs::remove_dir_all(&venv_path)?;
+        println!("   {} Creating new realm environment...", "→".cyan());
+        let env = RealmEnvironment::init(&venv_path)?;
+        env.setup_python_isolation(&runtime, &self.runtime_manager)?;
+        println!("   {} Created .venv", "✓".green());
+      }
+    } else if !venv_path.exists() {
+      println!("   {} Creating realm environment...", "→".cyan());
+      let env = RealmEnvironment::init(&venv_path)?;
+      env.setup_python_isolation(&runtime, &self.runtime_manager)?;
+      println!("   {} Created .venv", "✓".green());
+    }
+
+    // Copy .env.example if it exists
+    if features
+      .iter()
+      .any(|f| f.feature_type == crate::mount::FeatureType::EnvExample)
+    {
+      copy_env_example(&project_path)?;
+    }
+
+    // Install dependencies
+    let package_jsons: Vec<_> = features
+      .iter()
+      .filter(|f| f.feature_type == crate::mount::FeatureType::PackageJson)
+      .collect();
+
+    if !package_jsons.is_empty() {
+      for feature in package_jsons {
+        DependencyInstaller::install_node_dependencies(&feature.path)?;
+      }
+    }
+
+    let requirements: Vec<_> = features
+      .iter()
+      .filter(|f| f.feature_type == crate::mount::FeatureType::Requirements)
+      .collect();
+
+    if !requirements.is_empty() {
+      for feature in requirements {
+        DependencyInstaller::install_python_dependencies(&feature.path)?;
+      }
+    }
+
+    println!();
+    println!("{}", "✨ Environment ready!".green().bold());
+    println!();
+    println!("{}:", "Next steps".bright_white().bold());
+    println!(
+      "  {}",
+      format!("source {}/bin/activate", venv_path.display()).bright_cyan()
     );
     println!("  {}", "realm start".bright_cyan());
 

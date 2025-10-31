@@ -23,6 +23,36 @@ realm start
 
 Visit http://localhost:8000 - your full-stack app is running!
 
+## Onboarding Mode (Existing Projects)
+
+Join an existing project? Use `realm mount` to automatically setup everything:
+
+```bash
+# Clone your team's project
+git clone https://github.com/yourteam/project
+cd project
+
+# Automatically detect and setup environment
+realm mount
+
+# Realm automatically:
+# → Detects realm.yml, package.json, requirements.txt
+# → Infers correct runtime
+# → Creates .venv environment
+# → Installs all dependencies
+# → Copies .env.example to .env
+
+# Activate and start
+source .venv/bin/activate
+realm start
+```
+
+Perfect for:
+- New team members onboarding
+- Setting up on a new machine
+- CI/CD pipelines
+- Quick project demos
+
 ## Command-Line Mode
 
 For automation or when you know what you want:

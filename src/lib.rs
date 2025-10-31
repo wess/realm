@@ -5,6 +5,7 @@ pub mod cli;
 pub mod config;
 pub mod env;
 pub mod errors;
+pub mod mount;
 pub mod process;
 pub mod proxy;
 pub mod runtime;

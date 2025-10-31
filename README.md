@@ -100,6 +100,68 @@ realm start
 # Visit http://localhost:8000 - it just works!
 ```
 
+## Onboarding to Existing Projects
+
+Perfect for team onboarding! Clone an existing project and let Realm automatically detect and setup everything:
+
+```bash
+# Clone your team's project
+git clone https://github.com/yourteam/project
+cd project
+
+# Mount automatically detects project structure and sets up environment
+realm mount
+
+# Realm will:
+# → Detect realm.yml, package.json, requirements.txt, etc.
+# → Infer the correct runtime (bun/node/python)
+# → Create the .venv environment
+# → Install all dependencies
+# → Copy .env.example to .env
+```
+
+**Example Output:**
+```
+🔍 Inspecting project...
+   📋 Found realm.yml at realm.yml
+   📦 Found package.json at frontend/package.json
+   📦 Found package.json at backend/package.json
+   🔐 Found .env.example at .env.example
+
+🚀 Setting up environment...
+   → Detected runtime: bun
+   ✓ Using system-installed bun
+   → Creating realm environment...
+   ✓ Created .venv
+   → Copying .env.example → .env
+   ✓ Created .env file
+   → Installing dependencies in frontend/...
+   ✓ Installed dependencies (247 packages)
+   → Installing dependencies in backend/...
+   ✓ Installed dependencies (89 packages)
+
+✨ Environment ready!
+
+Next steps:
+  source .venv/bin/activate
+  realm start
+```
+
+**Supported Auto-Detection:**
+- `realm.yml` - Configuration and runtime detection
+- `package.json` - Node/Bun projects (runs npm/bun install)
+- `requirements.txt` - Python projects (runs pip install)
+- `.env.example` - Copies to .env
+- `docker-compose.yml` - Detected and noted
+- `Cargo.toml` - Rust projects
+- `go.mod` - Go projects
+
+**Use Cases:**
+- New developer joining your team
+- Setting up project on a new machine
+- CI/CD environment setup
+- Quick project demos
+
 ## Core Workflow
 
 ### 1. Initialize Environment

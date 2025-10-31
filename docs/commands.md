@@ -127,6 +127,114 @@ Use a project template?:
 
 ---
 
+## realm mount
+
+Mount an existing project and automatically setup its environment.
+
+### Usage
+
+```bash
+realm mount [PATH] [OPTIONS]
+```
+
+### Arguments
+
+- `PATH` - Directory to mount (default: current directory `.`)
+
+### Options
+
+- `-y, --yes` - Skip interactive prompts and use defaults
+
+### What It Does
+
+Automatically detects project structure and sets up the environment:
+
+1. **Inspects project** - Scans for realm.yml, package.json, requirements.txt, etc.
+2. **Infers runtime** - Detects correct runtime from project files
+3. **Creates environment** - Sets up .venv with appropriate runtime
+4. **Installs dependencies** - Runs npm/bun/pip install as needed
+5. **Sets up .env** - Copies .env.example to .env
+
+### Detected Files
+
+- `realm.yml` - Configuration and runtime detection
+- `package.json` - Node/Bun projects (automatically runs install)
+- `requirements.txt` - Python projects (automatically runs pip install)
+- `.env.example` - Copies to .env
+- `docker-compose.yml` - Detected and displayed
+- `Cargo.toml` - Rust projects (noted)
+- `go.mod` - Go projects (noted)
+
+### Examples
+
+**Mount current directory**:
+```bash
+cd existing-project
+realm mount
+```
+
+**Mount specific directory**:
+```bash
+realm mount ./my-project
+```
+
+**Skip prompts (useful for CI/CD)**:
+```bash
+realm mount --yes
+```
+
+### Example Output
+
+```
+🔍 Inspecting project...
+   📋 Found realm.yml at realm.yml
+   📦 Found package.json at frontend/package.json
+   📦 Found package.json at backend/package.json
+   🔐 Found .env.example at .env.example
+
+🚀 Setting up environment...
+   → Detected runtime: bun
+   ✓ Using system-installed bun
+   → Creating realm environment...
+   ✓ Created .venv
+   → Copying .env.example → .env
+   ✓ Created .env file
+   → Installing dependencies in frontend/...
+   ✓ Installed dependencies (247 packages)
+   → Installing dependencies in backend/...
+   ✓ Installed dependencies (89 packages)
+
+✨ Environment ready!
+
+Next steps:
+  source .venv/bin/activate
+  realm start
+```
+
+### Use Cases
+
+- **Team onboarding** - New developer clones repo and runs `realm mount`
+- **New machine setup** - Quickly setup project on fresh environment
+- **CI/CD** - Automated environment setup in pipelines
+- **Project demos** - Fast setup for demonstrations
+
+### Runtime Detection
+
+Realm infers the runtime in this order:
+
+1. `runtime` field in `realm.yml`
+2. Presence of `requirements.txt` → Python
+3. Presence of `Cargo.toml` → Rust (noted, not managed)
+4. Presence of `go.mod` → Go (noted, not managed)
+5. Presence of `package.json` → Bun (default)
+
+### Exit Status
+
+- `0` - Success
+- `1` - Error (directory not found, no detectable features, etc.)
+
+---
+
 ## realm start
 
 Start all processes and proxy server.
